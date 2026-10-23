@@ -1,0 +1,10 @@
+{
+    "KPlugin": {
+        "Description": "Decoración de ventanas de Vitrum (semáforos de macOS)",
+        "EnabledByDefault": true,
+        "Name": "Vitrum"
+    },
+    "org.kde.kdecoration3": {
+        "recommendedBorderSize": "None"
+    }
+}

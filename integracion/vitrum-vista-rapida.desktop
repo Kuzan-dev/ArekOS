@@ -1,0 +1,10 @@
+[Desktop Entry]
+Type=Service
+MimeType=all/all;
+Actions=vistaRapida;
+X-KDE-Priority=TopLevel
+
+[Desktop Action vistaRapida]
+Name=Vista rápida
+Icon=view-preview
+Exec=vitrum-ajustes --vista-rapida %f

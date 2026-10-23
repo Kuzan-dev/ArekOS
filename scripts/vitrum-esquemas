@@ -1,0 +1,27 @@
+#!/usr/bin/env python3
+"""Genera los esquemas de color Vitrum Claro/Oscuro a partir de WhiteSur (estilo Sequoia):
+acento azul de macOS y semáforos con los colores exactos de Apple (Klassy los toma de aquí)."""
+import os, re
+d = os.path.expanduser("~/.local/share/color-schemes/")
+for src, name, dark in (("WhiteSur.colors", "VitrumLight", False), ("WhiteSurDark.colors", "VitrumDark", True)):
+    s = open(d + src, encoding="utf-8").read()
+    acc = "10,132,255" if dark else "0,122,255"
+    for k, v in {"ForegroundNegative": "255,95,87", "ForegroundNeutral": "254,188,46", "ForegroundPositive": "40,200,64",
+                 "DecorationFocus": acc, "DecorationHover": acc}.items():
+        s = re.sub(rf"^{k}=.*$", f"{k}={v}", s, flags=re.M)
+    # solo la línea BackgroundNormal de [Colors:Selection] ([^\n]* para no comerse el resto del archivo)
+    s = re.sub(r"(\[Colors:Selection\][^\[]*?)BackgroundNormal=[^\n]*", lambda m: m.group(1) + "BackgroundNormal=" + acc, s, flags=re.S)
+    if dark:
+        # colores del Finder oscuro (medidos por SSH): ventana, contenido y barras del mismo #1E1E1E, sin el gris
+        # de WhiteSur (36 el contenido y 54 las barras, que dejaban Dolphin grisáceo)
+        for grp, normal, alt in (("Window", "30,30,30", "38,38,38"), ("View", "30,30,30", "36,36,36"),
+                                 ("Header", "30,30,30", "38,38,38"), ("Header][Inactive", "30,30,30", "38,38,38"),
+                                 ("Complementary", "30,30,30", "38,38,38"), ("Button", "58,58,58", "50,50,50")):
+            def fix(m, normal=normal, alt=alt):
+                b = re.sub(r"(?m)^BackgroundNormal=.*$", "BackgroundNormal=" + normal, m.group(0))
+                return re.sub(r"(?m)^BackgroundAlternate=.*$", "BackgroundAlternate=" + alt, b)
+            s = re.sub(r"\[Colors:" + re.escape(grp) + r"\]\n(?:[^\[\n][^\n]*\n|\n)*", fix, s)
+    s = re.sub(r"^Name=.*$", "Name=Vitrum " + ("Oscuro" if dark else "Claro"), s, flags=re.M)
+    s = re.sub(r"^ColorScheme=.*$", "ColorScheme=" + name, s, flags=re.M)
+    open(d + name + ".colors", "w", encoding="utf-8").write(s)
+print("esquemas Vitrum generados desde WhiteSur")

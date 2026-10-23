@@ -1,0 +1,11 @@
+#!/bin/bash
+# Super+Y (Cmd+Y en macOS): abre la Vista rápida del archivo seleccionado en Dolphin.
+# Dolphin no ofrece la selección por D-Bus: le pedimos que la copie y la leemos del portapapeles.
+dolphin=$(busctl --user list --no-legend 2>/dev/null | awk '{print $1}' | grep -m1 '^org.kde.dolphin')
+[ -z "$dolphin" ] && exit 0
+antes=$(timeout 2 busctl --user call org.kde.klipper /klipper org.kde.klipper.klipper getClipboardContents 2>/dev/null)
+timeout 2 busctl --user call "$dolphin" /dolphin/Dolphin_1 org.kde.KMainWindow activateAction s edit_copy >/dev/null 2>&1
+sleep 0.2
+url=$(timeout 2 busctl --user call org.kde.klipper /klipper org.kde.klipper.klipper getClipboardContents 2>/dev/null | sed -E 's/^s "//; s/"$//' | head -1)
+archivo=$(python3 -c 'import sys,urllib.parse as u; s=sys.argv[1].split("\\n")[0].strip(); print(u.unquote(s[7:]) if s.startswith("file://") else s)' "$url")
+[ -e "$archivo" ] && exec "$HOME/.local/bin/vitrum-ajustes" --vista-rapida "$archivo"

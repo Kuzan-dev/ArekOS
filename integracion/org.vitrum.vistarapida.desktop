@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=Vista rápida
+Comment=Previsualiza el archivo seleccionado en Dolphin
+Exec=vitrum-vista-rapida
+Icon=view-preview
+NoDisplay=true
+X-KDE-Shortcuts=Meta+Y
+StartupNotify=false

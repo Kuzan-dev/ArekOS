@@ -1,0 +1,22 @@
+#!/bin/bash
+# Ratón y trackpad a través de KWin (Wayland); KWin guarda los cambios en kcminputrc por dispositivo.
+#   vitrum-raton                          → sys|nombre|ratón|trackpad|aceleración|natural|zurdo|tocar|escribir|factor|clicdedos|perfilplano
+#   vitrum-raton set raton|trackpad <propiedad> <b|d> <valor>
+S=org.kde.KWin; B=/org/kde/KWin/InputDevice; I=org.kde.KWin.InputDevice
+get() { busctl --user get-property $S $B/$1 $I $2 2>/dev/null | awk '{print $2}' | tr -d '"'; }
+devs=$(busctl --user get-property $S $B org.kde.KWin.InputDeviceManager devicesSysNames 2>/dev/null | cut -d' ' -f3- | tr -d '"')
+if [ "${1:-}" = set ]; then
+    for d in $devs; do
+        [ "$(get $d pointer)" = true ] || continue
+        tp=$(get $d touchpad)
+        { [ "$2" = trackpad ] && [ "$tp" = true ]; } || { [ "$2" = raton ] && [ "$tp" != true ]; } || continue
+        busctl --user set-property $S $B/$d $I "$3" "$4" "$5" 2>/dev/null
+    done
+    exit 0
+fi
+for d in $devs; do
+    [ "$(get $d pointer)" = true ] || continue
+    n=$(busctl --user get-property $S $B/$d $I name 2>/dev/null | cut -d' ' -f2- | tr -d '"' | tr '|' ' ')
+    case "$n" in *"Consumer Control"*|*"System Control"*) continue ;; esac   # teclas multimedia, no ratones
+    echo "$d|$n|true|$(get $d touchpad)|$(get $d pointerAcceleration)|$(get $d naturalScroll)|$(get $d leftHanded)|$(get $d tapToClick)|$(get $d disableWhileTyping)|$(get $d scrollFactor)|$(get $d clickMethodClickfinger)|$(get $d pointerAccelerationProfileFlat)"
+done

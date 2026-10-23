@@ -1,0 +1,31 @@
+#!/bin/bash
+# Brillo por monitor vía PowerDevil (org.kde.ScreenBrightness, DDC/CI), como el control nativo de KDE.
+#   vitrum-brillo                → una línea por monitor: salida|objeto|nombre|porcentaje
+#   vitrum-brillo <objeto> <0-100>
+Q=$(command -v qdbus-qt6 || command -v qdbus6 || echo qdbus)
+B=org.kde.ScreenBrightness
+if [ $# -eq 2 ]; then
+    m=$(timeout 2 $Q $B /org/kde/ScreenBrightness/$1 $B.Display.MaxBrightness)
+    exec timeout 2 $Q $B /org/kde/ScreenBrightness/$1 $B.Display.SetBrightness $(( $2 * ${m:-100} / 100 )) 0
+fi
+# nombre del monitor (EDID) de cada salida, para emparejarla con la etiqueta de PowerDevil
+declare -A salida
+for f in /sys/class/drm/card*-*/edid; do
+    n=$(python3 - "$f" <<'PY'
+import sys
+e = open(sys.argv[1], "rb").read()
+for i in range(54, 126, 18):
+    d = e[i:i + 18]
+    if len(d) == 18 and d[:3] == bytes(3) and d[3] == 0xFC:
+        print(d[5:].split(b"\n")[0].decode(errors="ignore").strip())
+PY
+)
+    [ -n "$n" ] && salida["$n"]=$(basename "$(dirname "$f")" | sed 's/^card[0-9]*-//')
+done
+for d in $(timeout 2 $Q $B /org/kde/ScreenBrightness $B.DisplaysDBusNames); do
+    p=$(timeout 2 $Q $B /org/kde/ScreenBrightness/$d org.freedesktop.DBus.Properties.GetAll $B.Display)
+    l=$(sed -n 's/^Label: //p' <<<"$p"); b=$(sed -n 's/^Brightness: //p' <<<"$p"); m=$(sed -n 's/^MaxBrightness: //p' <<<"$p")
+    o=""
+    for n in "${!salida[@]}"; do [[ "$l" == *"$n"* ]] && o=${salida[$n]}; done
+    [ "${m:-0}" -gt 0 ] && echo "$o|$d|$l|$(( (b * 100 + m / 2) / m ))"
+done

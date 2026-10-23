@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=Spotlight
+Comment=Buscar apps, archivos y ajustes
+Exec=dbus-send --session --print-reply --type=method_call --dest=org.vitrum.Shell /Shell org.vitrum.Shell.ToggleSpotlight
+Icon=search
+NoDisplay=true
+X-KDE-Shortcuts=Meta+Space,Alt+Space,Meta+S
+StartupNotify=false

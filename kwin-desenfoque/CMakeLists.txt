@@ -1,0 +1,21 @@
+# Desenfoque de Vitrum: el efecto de desenfoque de KWin 6.6.4 (src/plugins/blur) con un único cambio
+# (vitrumCornerRadius en blur.cpp). Se compila contra el kwin-devel de la versión instalada; si KWin se
+# actualiza, el guardián de inicio de sesión lo desactiva y vuelve al desenfoque de KDE hasta recompilarlo.
+cmake_minimum_required(VERSION 3.20)
+project(vitrumblur LANGUAGES CXX)
+set(CMAKE_CXX_STANDARD 23)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+find_package(ECM REQUIRED NO_MODULE)
+set(CMAKE_MODULE_PATH ${ECM_MODULE_PATH})
+include(KDEInstallDirs)
+include(KDECMakeSettings)
+include(KDECompilerSettings NO_POLICY_SCOPE)
+find_package(Qt6 REQUIRED COMPONENTS Core Gui DBus)
+find_package(KF6 REQUIRED COMPONENTS Config ConfigWidgets CoreAddons)
+find_package(KWin REQUIRED COMPONENTS kwineffects)
+find_package(KDecoration3 REQUIRED)
+set(CMAKE_LIBRARY_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin)
+set(SRCS blur.cpp main.cpp vitrumblur.qrc)
+kconfig_add_kcfg_files(SRCS blurconfig.kcfgc)
+kcoreaddons_add_plugin(vitrumblur SOURCES ${SRCS} INSTALL_NAMESPACE "kwin/effects/plugins/")
+target_link_libraries(vitrumblur KWin::kwin KF6::ConfigGui KDecoration3::KDecoration)

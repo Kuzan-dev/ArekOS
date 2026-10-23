@@ -1,0 +1,32 @@
+#!/bin/bash
+# Estado para el Centro de Control: una línea clave=valor por dato.
+t() { timeout 2 "$@" 2>/dev/null; }
+wifi_dev=$(t nmcli -t -f TYPE,STATE,CONNECTION device | awk -F: '$1=="wifi"{print $2":"$3; exit}')
+red=$(t nmcli -t -f TYPE,STATE,CONNECTION device | awk -F: '$1=="ethernet" && $2=="connected"{print $3; exit}')
+echo "wifi_dev=${wifi_dev}"
+echo "wifi_on=$(t nmcli -t -f WIFI general)"
+echo "ethernet=${red}"
+if ls /sys/class/bluetooth/* >/dev/null 2>&1; then
+    echo "bt=1"; echo "bt_on=$(t bluetoothctl show | awk '/Powered:/{print $2}')"
+else echo "bt=0"; fi
+echo "dnd=$(kreadconfig6 --file plasmanotifyrc --group DoNotDisturb --key Until)"
+echo "vol=$(t pactl get-sink-volume @DEFAULT_SINK@ | grep -oE '[0-9]+%' | head -1 | tr -d %)"
+echo "mute=$(t pactl get-sink-mute @DEFAULT_SINK@ | awk '{print $2}')"
+echo "sink=$(t pactl -f json list sinks | python3 -c 'import json,sys,subprocess; d=subprocess.run(["pactl","get-default-sink"],capture_output=True,text=True).stdout.strip(); s=next((x for x in json.load(sys.stdin) if x["name"]==d),{}); p=s.get("properties",{}); desc=s.get("description") if s.get("description") not in (None,"(null)") else ""; print(p.get("node.nick") or desc or p.get("device.description") or "")' 2>/dev/null)"
+echo "sink_name=$(t pactl get-default-sink)"
+echo "night=$(kreadconfig6 --file kwinrc --group NightColor --key Active)"
+# el nombre del esquema no siempre está en kdeglobals (KDE lo omite si es el del tema global): se deduce del color
+bg=$(kreadconfig6 --file kdeglobals --group Colors:Window --key BackgroundNormal)
+IFS=, read -r r g b <<<"${bg:-246,246,246}"
+echo "scheme=$([ $(( (299 * r + 587 * g + 114 * b) / 1000 )) -lt 128 ] && echo VitrumDark || echo VitrumLight)"
+# Brillo: PowerDevil (org.kde.ScreenBrightness), igual que el control nativo de KDE: DDC/CI por monitor.
+# Una entrada por pantalla: objeto|nombre|brillo(0-100)
+Q=$(command -v qdbus-qt6 || command -v qdbus6 || echo qdbus)
+disp=""
+for d in $(t $Q org.kde.ScreenBrightness /org/kde/ScreenBrightness org.kde.ScreenBrightness.DisplaysDBusNames); do
+    props=$(t $Q org.kde.ScreenBrightness /org/kde/ScreenBrightness/$d org.freedesktop.DBus.Properties.GetAll org.kde.ScreenBrightness.Display)
+    b=$(sed -n 's/^Brightness: //p' <<<"$props"); m=$(sed -n 's/^MaxBrightness: //p' <<<"$props")
+    l=$(sed -n 's/^Label: //p' <<<"$props" | sed 's/^\(LG Electronics\|Xiaomi Corporation\|Samsung Electric Company\|Dell Inc\.\) //' | tr '|;' '  ')
+    [ -n "$b" ] && [ "${m:-0}" -gt 0 ] && disp="$disp${disp:+;}$d|$l|$(( (b * 100 + m / 2) / m ))|$m"
+done
+echo "disp=$disp"

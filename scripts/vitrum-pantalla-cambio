@@ -1,0 +1,17 @@
+#!/bin/bash
+# Cambio de pantalla con red de seguridad (como "¿Mantener esta configuración?" de macOS y KDE).
+#   vitrum-pantalla-cambio <id> "<args de kscreen-doctor a aplicar>" "<args para revertir>"
+# Aplica el cambio y espera 15 s a que Ajustes cree ~/.cache/vitrum-pantalla/<id>.ok; si no aparece
+# (el usuario no confirmó o la sesión se colgó, como con HDR en algunas NVIDIA), revierte por su cuenta.
+set -u
+id=$1; aplicar=$2; revertir=$3
+d=~/.cache/vitrum-pantalla; mkdir -p "$d"; rm -f "$d/$id.ok"
+# shellcheck disable=SC2086
+timeout 10 kscreen-doctor $aplicar >/dev/null 2>&1
+for _ in $(seq 1 30); do
+    sleep 0.5
+    [ -f "$d/$id.ok" ] && { rm -f "$d/$id.ok"; exit 0; }
+done
+# shellcheck disable=SC2086
+timeout 10 kscreen-doctor $revertir >/dev/null 2>&1
+logger -t vitrum "cambio de pantalla revertido: $aplicar"

@@ -1,0 +1,49 @@
+#!/bin/bash
+# vitrum-modo claro|oscuro|auto [--aplicar]   ·   vitrum-modo --temporizador
+# Cambia entre el aspecto claro y el oscuro. Solo cambian el esquema de color y los iconos: el resto
+# (estilo Klassy, decoración, tema de Plasma "Vitrum", fondo "Vitrum") toma los colores del esquema,
+# así que todas las apps y el escritorio se actualizan en vivo y a la vez.
+# "auto" usa el claro de 7:00 a 19:00 y el oscuro el resto; el temporizador vitrum-modo.timer lo repite.
+set -u
+modo=${1:-auto}
+if [ "$modo" = --temporizador ]; then
+    [ "$(kreadconfig6 --file vitrumrc --group Apariencia --key Modo)" = auto ] || exit 0
+    modo=auto
+else
+    kwriteconfig6 --file vitrumrc --group Apariencia --key Modo "$modo"
+fi
+if [ "$modo" = auto ]; then
+    h=$((10#$(date +%H)))
+    if [ $h -ge 7 ] && [ $h -lt 19 ]; then modo=claro; else modo=oscuro; fi
+fi
+if [ "$modo" = oscuro ]; then esquema=VitrumDark iconos=WhiteSur-dark plasma=Vitrum-Oscuro fondo=WhiteSur-dark
+else esquema=VitrumLight iconos=WhiteSur-light plasma=Vitrum fondo=WhiteSur-light; fi
+
+actual=$(kreadconfig6 --file kdeglobals --group General --key ColorScheme)
+if [ -z "$actual" ]; then   # KDE omite el nombre si coincide con el del tema global: se deduce del color
+    IFS=, read -r r g b <<<"$(kreadconfig6 --file kdeglobals --group Colors:Window --key BackgroundNormal)"
+    [ -n "${r:-}" ] && actual=$([ $(( (299 * r + 587 * g + 114 * b) / 1000 )) -lt 128 ] && echo VitrumDark || echo VitrumLight)
+fi
+[ "$actual" = "$esquema" ] && [ "${2:-}" != --aplicar ] && exit 0
+
+# Las herramientas de Plasma no hacen nada si el tema ya es el activo: con --aplicar se fuerza la recarga
+if [ "${2:-}" = --aplicar ]; then
+    [ "$actual" = "$esquema" ] && plasma-apply-colorscheme BreezeClassic >/dev/null 2>&1
+    [ "$(kreadconfig6 --file plasmarc --group Theme --key name)" = "$plasma" ] && plasma-apply-desktoptheme default >/dev/null 2>&1
+fi
+
+acento=$(kreadconfig6 --file kdeglobals --group General --key AccentColor)
+if [ -n "$acento" ]; then
+    plasma-apply-colorscheme "$esquema" --accent-color "$(printf '#%02X%02X%02X' ${acento//,/ })" >/dev/null
+else
+    plasma-apply-colorscheme "$esquema" >/dev/null
+fi
+/usr/libexec/plasma-changeicons "$iconos" >/dev/null 2>&1
+# Plasma solo redibuja la barra de menús y sus menús al cambiar de tema (no al cambiar el esquema)
+plasma-apply-desktoptheme "$plasma" >/dev/null 2>&1
+# Fondo: solo si es uno de los de serie (no pisamos un fondo elegido por el usuario)
+rc=~/.config/plasma-org.kde.plasma.desktop-appletsrc
+if grep -qE "^Image=.*wallpapers/(Vitrum|WhiteSur-(light|dark)|MacTahoe-(Light|Dark))/?$" "$rc" 2>/dev/null; then
+    plasma-apply-wallpaperimage "$HOME/.local/share/wallpapers/$fondo" >/dev/null 2>&1
+fi
+exit 0

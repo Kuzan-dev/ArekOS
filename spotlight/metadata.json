@@ -1,0 +1,13 @@
+{
+    "KPlugin": {
+        "Id": "org.vitrum.spotlight",
+        "Name": "Spotlight",
+        "Description": "Abre la búsqueda (KRunner) desde la barra de menús",
+        "Icon": "search",
+        "Authors": [{ "Name": "Vitrum" }],
+        "License": "GPL-3.0",
+        "Version": "1.0"
+    },
+    "KPackageStructure": "Plasma/Applet",
+    "X-Plasma-API-Minimum-Version": "6.0"
+}

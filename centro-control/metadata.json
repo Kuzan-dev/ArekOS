@@ -1,0 +1,13 @@
+{
+    "KPlugin": {
+        "Id": "org.vitrum.centrocontrol",
+        "Name": "Centro de Control",
+        "Description": "Controles rápidos estilo macOS",
+        "Icon": "preferences-system",
+        "Authors": [{ "Name": "Vitrum" }],
+        "License": "GPL-3.0",
+        "Version": "1.0"
+    },
+    "KPackageStructure": "Plasma/Applet",
+    "X-Plasma-API-Minimum-Version": "6.0"
+}

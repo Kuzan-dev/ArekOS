@@ -1,0 +1,25 @@
+#!/bin/bash
+# vitrum-plasma-set "Grupo/Sub/Grupo;clave;valor" ...
+# Escribe en la configuración de los paneles de Plasma con plasmashell detenido (si no, lo sobrescribe
+# al salir) y lo vuelve a arrancar. "@tray" en la ruta se sustituye por "<panel>/Applets/<bandeja>".
+set -u
+rc=plasma-org.kde.plasma.desktop-appletsrc
+f=~/.config/$rc
+# Plasma 6: la bandeja va anidada dentro del panel → "Containments/<panel>/Applets/<bandeja>"
+tray=$(awk '/^\[Containments\]\[[0-9]+\]\[Applets\]\[[0-9]+\]$/{g=$0} /^plugin=org.kde.plasma.systemtray$/{gsub(/[][]/," ",g); split(g,a," "); print a[2]"/Applets/"a[4]; exit}' "$f")
+
+escribir() {
+    for arg in "$@"; do
+        IFS=';' read -r ruta clave valor <<<"$arg"
+        ruta=${ruta//@tray/$tray}
+        grupos=()
+        IFS='/' read -ra partes <<<"$ruta"
+        for g in "${partes[@]}"; do grupos+=(--group "$g"); done
+        kwriteconfig6 --file $rc "${grupos[@]}" --key "$clave" "$valor"
+    done
+}
+if systemctl --user -q is-active plasma-plasmashell.service 2>/dev/null; then
+    systemctl --user stop plasma-plasmashell.service; escribir "$@"; systemctl --user start plasma-plasmashell.service
+else
+    kquitapp6 plasmashell >/dev/null 2>&1; sleep 1; escribir "$@"; (setsid plasmashell >/dev/null 2>&1 &)
+fi

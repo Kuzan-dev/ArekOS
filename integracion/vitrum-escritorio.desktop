@@ -1,0 +1,14 @@
+[Desktop Entry]
+Type=Service
+MimeType=inode/directory;
+X-KDE-Protocols=desktop
+Actions=fondo;pantallas;
+X-KDE-Priority=TopLevel
+
+[Desktop Action fondo]
+Name=Cambiar fondo del escritorio…
+Exec=vitrum-ajustes fondo
+
+[Desktop Action pantallas]
+Name=Ajustes de pantallas…
+Exec=vitrum-ajustes pantallas

@@ -1,0 +1,20 @@
+#!/bin/bash
+# Listas del Centro de Control (como los menús de Wi-Fi y Bluetooth de macOS).
+#   vitrum-cc-detalle wifi → en_uso|SSID|señal|seguridad   (redes visibles, la conectada primero)
+#   vitrum-cc-detalle bt   → MAC|nombre|conectado|icono    (dispositivos emparejados)
+t() { timeout "${T:-4}" "$@" 2>/dev/null; }
+case "$1" in
+wifi)
+    t nmcli -t -f IN-USE,SSID,SIGNAL,SECURITY dev wifi list --rescan auto \
+        | awk -F: '$2!="" && !seen[$2]++ {print ($1=="*"?1:0) "|" $2 "|" $3 "|" $4}' | sort -t'|' -k1,1r -k3,3nr | head -20
+    ;;
+bt)
+    for mac in $(t bluetoothctl devices Paired | awk '{print $2}'); do
+        info=$(t bluetoothctl info "$mac")
+        name=$(sed -n 's/^\s*Alias: //p' <<<"$info" | head -1 | tr '|' ' ')
+        con=$(sed -n 's/^\s*Connected: //p' <<<"$info" | head -1)
+        icon=$(sed -n 's/^\s*Icon: //p' <<<"$info" | head -1)
+        echo "$mac|${name:-$mac}|$([ "$con" = yes ] && echo 1 || echo 0)|${icon:-bluetooth}"
+    done
+    ;;
+esac

@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=Launchpad
+Comment=Todas tus apps
+Exec=dbus-send --session --print-reply --type=method_call --dest=org.vitrum.Shell /Shell org.vitrum.Shell.ToggleLaunchpad
+Icon=vitrum-launchpad
+NoDisplay=true
+X-KDE-Shortcuts=Meta
+StartupNotify=false

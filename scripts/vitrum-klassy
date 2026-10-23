@@ -1,0 +1,53 @@
+#!/bin/bash
+# Configura Klassy (decoración de ventanas y estilo de apps) con el aspecto Vitrum. Idempotente.
+set -u
+B=~/.cache/vitrum-src/klassy/kdecoration/config/presets/Eaten_Fruits.klpw
+export QT_QPA_PLATFORM=offscreen
+klassy-settings -i "$B" >/dev/null 2>&1
+klassy-settings -w "Eaten Fruits" >/dev/null 2>&1
+K() { kwriteconfig6 --file klassy/klassyrc "$@"; }
+K --group Windeco --key WindowCornerRadius 10
+K --group Windeco --key MatchTitleBarToApplicationColor false
+K --group TitleBarOpacity --key TitleBarOpacityActive 100
+K --group TitleBarOpacity --key TitleBarOpacityInactive 100
+for s in Active Inactive; do
+    K --group ButtonColors --key ButtonBackgroundOpacity$s 100
+    K --group ButtonColors --key AdjustBackgroundColorOnPoorContrast$s false
+    K --group ButtonBehaviour --key VaryColorBackground$s No
+    K --group ButtonBehaviour --key VaryColorCloseBackground$s No
+done
+# Ventanas inactivas: semáforos grises, como en macOS
+g='{"BackgroundNormal":[255,206,206,208],"OutlineNormal":[20,0,0,0],"OutlineHover":[20,0,0,0],"OutlinePress":[20,0,0,0]}'
+for b in Close Minimize Maximize; do K --group ButtonColors --key ButtonOverrideColorsInactive$b "$g"; done
+# Ajustes del Sistema y Vista rápida dibujan su propia barra (semáforos dentro de la ventana)
+K --group "Windeco Exception 0" --key Enabled true
+K --group "Windeco Exception 0" --key ExceptionWindowPropertyType ExceptionWindowClassName
+K --group "Windeco Exception 0" --key ExceptionWindowPropertyPattern vitrum
+K --group "Windeco Exception 0" --key HideTitleBar Always
+# Estilo de apps: menús translúcidos (KWin los desenfoca)
+K --group Style --key MenuOpacity 88
+kwriteconfig6 --file kwinrc --group org.kde.kdecoration2 --key library org.vitrum.decoracion
+kwriteconfig6 --file kwinrc --group org.kde.kdecoration2 --key theme Vitrum
+kwriteconfig6 --file kwinrc --group org.kde.kdecoration2 --key ButtonsOnLeft XIA
+kwriteconfig6 --file kwinrc --group org.kde.kdecoration2 --key ButtonsOnRight ""
+kwriteconfig6 --file kwinrc --group org.kde.kdecoration2 --key BorderSize None
+kwriteconfig6 --file kwinrc --group org.kde.kdecoration2 --key BorderSizeAuto false
+# Estilo de apps: Darkly (derivado de Breeze) por la barra lateral translúcida de Dolphin, como el Finder;
+# la decoración de ventana sigue siendo Klassy (semáforos)
+D() { kwriteconfig6 --file darklyrc --group Style "$@"; }
+D --key MenuOpacity 55
+D --key DolphinSidebarOpacity 78
+kwriteconfig6 --file darklyrc --group Common --key CornerRadius 10
+# barras de desplazamiento superpuestas que aparecen al desplazarse, como en macOS
+kwriteconfig6 --file darklyrc --group Common --key ScrollBarTransient true
+# desenfoque de KWin calibrado contra macOS (σ≈30 px; ver ajustes/qml/Material.qml)
+kwriteconfig6 --file kwinrc --group Effect-blur --key BlurStrength 10
+kwriteconfig6 --file kwinrc --group Effect-blur --key NoiseStrength 0
+D --key WidgetDrawShadow false
+kwriteconfig6 --file kdeglobals --group KDE --key widgetStyle Darkly
+kwriteconfig6 --file kdeglobals --group KDE --key ShowIconsInMenuItems false
+# Tema global: solo se usa para las pantallas de cierre de sesión (diálogo al estilo macOS)
+kwriteconfig6 --file kdeglobals --group KDE --key LookAndFeelPackage org.vitrum.claro
+dbus-send --session --type=signal /KWin org.kde.KWin.reloadConfig 2>/dev/null
+dbus-send --session --type=method_call --dest=org.kde.KWin /KWin org.kde.KWin.reconfigure 2>/dev/null
+exit 0

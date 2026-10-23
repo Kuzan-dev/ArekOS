@@ -1,0 +1,52 @@
+#!/usr/bin/env python3
+"""vitrum-bandeja "id1,id2,…" — deja en la bandeja de la barra de menús solo esos widgets
+(las notificaciones siempre) y reinicia Plasma para aplicarlo."""
+import os, re, subprocess, sys, time
+
+HOME = os.path.expanduser("~")
+RC = f"{HOME}/.config/plasma-org.kde.plasma.desktop-appletsrc"
+items = [x for x in (sys.argv[1] if len(sys.argv) > 1 else "").split(",") if x]
+if "org.kde.plasma.notifications" not in items:
+    items.insert(0, "org.kde.plasma.notifications")
+
+def stop_start(fn):
+    sysd = subprocess.run(["systemctl", "--user", "-q", "is-active", "plasma-plasmashell.service"]).returncode == 0
+    if sysd:
+        subprocess.run(["systemctl", "--user", "stop", "plasma-plasmashell.service"])
+    else:
+        subprocess.run(["kquitapp6", "plasmashell"], stderr=subprocess.DEVNULL)
+        time.sleep(1)
+    fn()
+    if sysd:
+        subprocess.run(["systemctl", "--user", "start", "plasma-plasmashell.service"])
+    else:
+        subprocess.Popen(["plasmashell"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, start_new_session=True)
+
+def apply():
+    text = open(RC, encoding="utf-8").read()
+    heads = [(m.group(0), m.start()) for m in re.finditer(r"^\[.*\]$", text, re.M)]
+    blocks = {h: (s, heads[i + 1][1] if i + 1 < len(heads) else len(text)) for i, (h, s) in enumerate(heads)}
+    tray = next((h for h, (s, e) in blocks.items() if re.fullmatch(r"\[Containments\]\[\d+\]\[Applets\]\[\d+\]", h)
+                 and re.search(r"^plugin=org.kde.plasma.systemtray$", text[s:e], re.M)), None)
+    if not tray:
+        return
+    base = tray[:-1]
+    drop = []
+    for h, (s, e) in blocks.items():
+        m = re.fullmatch(re.escape(base) + r"\]\[Applets\]\[(\d+)\]", h)
+        if m:
+            plugin = re.search(r"^plugin=(.*)$", text[s:e], re.M)
+            if plugin and plugin.group(1) not in items:
+                drop += [x for x in blocks if x.startswith(f"{base}][Applets][{m.group(1)}]")]
+    for h in sorted(set(drop), key=lambda x: -blocks[x][0]):
+        s, e = blocks[h]
+        text = text[:s] + text[e:]
+    g = tray + "[General]"
+    gm = re.search(re.escape(g) + r"\n(.*?)(?=^\[|\Z)", text, re.M | re.S)
+    body = gm.group(1) if gm else ""
+    body = re.sub(r"^extraItems=.*\n?", "", body, flags=re.M)
+    body = f"extraItems={','.join(items)}\n" + body
+    text = text.replace(gm.group(0), g + "\n" + body) if gm else text.rstrip("\n") + f"\n\n{g}\n{body}"
+    open(RC, "w", encoding="utf-8").write(text)
+
+stop_start(apply)

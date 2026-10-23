@@ -1,0 +1,12 @@
+{
+    "KPlugin": {
+        "Category": "Appearance",
+        "Description": "Desenfoque de KDE con las esquinas suavizadas en el Dock, el Centro de Control y Spotlight de Vitrum",
+        "EnabledByDefault": false,
+        "License": "GPL",
+        "Name": "Desenfoque de Vitrum"
+    },
+    "org.kde.kwin.effect": {
+        "enabledByDefaultMethod": true
+    }
+}

@@ -1,0 +1,279 @@
+#!/usr/bin/env python3
+"""Disposición estilo macOS con atajos Linux/Windows + Super para lo nuevo.
+Ejecutar con plasmashell detenido (si no, Plasma sobrescribe la configuración al salir).
+
+Barra de menús: [menú del sistema] [nombre app] [menú global] [espaciador] [bandeja] [lupa] [Centro de Control] [reloj]
+Dock:           [Launchpad] [apps] (dibujado por vitrum-shell)
+Atajos nuevos (Ctrl+C/V, Alt+Tab, etc. no se tocan):
+  Super            → Launchpad          Super+Espacio / Alt+Espacio / Super+S → Spotlight
+  Super+Tab        → Mission Control    Super+A               → Centro de Control
+  Super+N          → Notificaciones     Super+Y → Vista rápida (Dolphin)     Super+D, Super+L, Super+Shift+S → (por defecto de KDE)
+"""
+import os, re
+
+HOME = os.path.expanduser("~")
+RC = f"{HOME}/.config/plasma-org.kde.plasma.desktop-appletsrc"
+PS = f"{HOME}/.config/plasmashellrc"
+SC = f"{HOME}/.config/kglobalshortcutsrc"
+
+
+def load(path):
+    with open(path, encoding="utf-8") as f:
+        return f.read()
+
+
+def groups(text):
+    """Devuelve {cabecera: (inicio, fin)} de cada grupo del archivo KConfig."""
+    out, heads = {}, [(m.group(0), m.start()) for m in re.finditer(r"^\[.*\]$", text, re.M)]
+    for i, (h, s) in enumerate(heads):
+        out[h] = (s, heads[i + 1][1] if i + 1 < len(heads) else len(text))
+    return out
+
+
+def set_key(text, head, key, value):
+    g = groups(text)
+    if head not in g:
+        return text.rstrip("\n") + f"\n\n{head}\n{key}={value}\n"
+    s, e = g[head]
+    block = text[s:e]
+    if re.search(rf"^{re.escape(key)}=.*$", block, re.M):
+        block = re.sub(rf"^{re.escape(key)}=.*$", lambda _: f"{key}={value}", block, count=1, flags=re.M)
+    else:
+        block = block.rstrip("\n") + f"\n{key}={value}\n\n"
+    return text[:s] + block + text[e:]
+
+
+def del_group(text, head):
+    g = groups(text)
+    if head in g:
+        s, e = g[head]
+        text = text[:s] + text[e:]
+    return text
+
+
+def del_applet(text, cont, aid):
+    for h in [h for h in groups(text) if h.startswith(f"[Containments][{cont}][Applets][{aid}]")]:
+        text = del_group(text, h)
+    return text
+
+
+def find(text, plugin, cont_filter=None):
+    """[(contenedor, applet)] de los applets con ese plugin (en paneles de primer nivel)."""
+    res = []
+    for h, (s, e) in groups(text).items():
+        m = re.fullmatch(r"\[Containments\]\[(\d+)\]\[Applets\]\[(\d+)\]", h)
+        if m and (cont_filter is None or m.group(1) == cont_filter):
+            if re.search(rf"^plugin={re.escape(plugin)}$", text[s:e], re.M):
+                res.append((m.group(1), m.group(2)))
+    return res
+
+
+def find_panels(text):
+    """Lista de IDs de contenedores que son paneles (plugin=org.kde.panel)."""
+    res = []
+    for h, (s, e) in groups(text).items():
+        m = re.fullmatch(r"\[Containments\]\[(\d+)\]", h)
+        if m and re.search(r"^plugin=org\.kde\.panel$", text[s:e], re.M):
+            res.append(m.group(1))
+    return res
+
+
+def next_id(text):
+    ids = [int(x) for x in re.findall(r"\[(?:Containments|Applets)\]\[(\d+)\]", text)]
+    return (max(ids) if ids else 1) + 1
+
+
+rc = load(RC)
+panels = find_panels(rc)
+appmenu_panels = find(rc, "org.kde.plasma.appmenu")
+
+if appmenu_panels:
+    top = appmenu_panels[0][0]
+    _d = [c for c, _ in find(rc, "org.kde.plasma.icontasks") if c != top]
+    dock = _d[0] if _d else None
+else:
+    # Panel estándar de KDE (p. ej. instalación limpia): convertir el panel principal en la barra superior de macOS
+    top = panels[0]
+    dock = panels[1] if len(panels) > 1 else None
+
+# Asegurar que el panel superior esté arriba (location=3, formfactor=2)
+rc = set_key(rc, f"[Containments][{top}]", "location", "3")
+rc = set_key(rc, f"[Containments][{top}]", "formfactor", "2")
+
+# Si el panel superior viene de un panel estándar de KDE, quitar widgets de barra inferior (icontasks, pager, showdesktop)
+for plug in ("org.kde.plasma.icontasks", "org.kde.plasma.pager", "org.kde.plasma.showdesktop"):
+    for c, a in find(rc, plug, top):
+        rc = del_applet(rc, c, a)
+
+# 1) Logo → menú del sistema (sustituye a Kickoff o lo crea si no existe)
+for c, a in find(rc, "org.kde.plasma.kickoff", top):
+    rc = set_key(rc, f"[Containments][{c}][Applets][{a}]", "plugin", "org.vitrum.menuapple")
+    rc = del_group(rc, f"[Containments][{c}][Applets][{a}][Configuration][General]")
+    rc = del_group(rc, f"[Containments][{c}][Applets][{a}][Shortcuts]")
+if not find(rc, "org.vitrum.menuapple", top):
+    la = str(next_id(rc))
+    rc = set_key(rc, f"[Containments][{top}][Applets][{la}]", "plugin", "org.vitrum.menuapple")
+    rc = set_key(rc, f"[Containments][{top}][Applets][{la}]", "immutability", "1")
+
+# 1b) Nombre de la app activa
+if not find(rc, "org.vitrum.nombreapp", top):
+    na = str(next_id(rc))
+    rc = set_key(rc, f"[Containments][{top}][Applets][{na}]", "plugin", "org.vitrum.nombreapp")
+    rc = set_key(rc, f"[Containments][{top}][Applets][{na}]", "immutability", "1")
+
+# 1c) Menú global (appmenu) y espaciador (panelspacer)
+if not find(rc, "org.kde.plasma.appmenu", top):
+    am = str(next_id(rc))
+    rc = set_key(rc, f"[Containments][{top}][Applets][{am}]", "plugin", "org.kde.plasma.appmenu")
+    rc = set_key(rc, f"[Containments][{top}][Applets][{am}]", "immutability", "1")
+if not find(rc, "org.kde.plasma.panelspacer", top):
+    ps_id = str(next_id(rc))
+    rc = set_key(rc, f"[Containments][{top}][Applets][{ps_id}]", "plugin", "org.kde.plasma.panelspacer")
+    rc = set_key(rc, f"[Containments][{top}][Applets][{ps_id}]", "immutability", "1")
+
+# 2) Lupa de Spotlight y Centro de Control
+if not find(rc, "org.vitrum.spotlight", top):
+    sp = str(next_id(rc))
+    rc = set_key(rc, f"[Containments][{top}][Applets][{sp}]", "plugin", "org.vitrum.spotlight")
+    rc = set_key(rc, f"[Containments][{top}][Applets][{sp}]", "immutability", "1")
+if not find(rc, "org.vitrum.centrocontrol", top):
+    cc = str(next_id(rc))
+    rc = set_key(rc, f"[Containments][{top}][Applets][{cc}]", "plugin", "org.vitrum.centrocontrol")
+    rc = set_key(rc, f"[Containments][{top}][Applets][{cc}]", "immutability", "1")
+
+for c, a in find(rc, "org.vitrum.centrocontrol", top):
+    rc = del_group(rc, f"[Containments][{c}][Applets][{a}][Configuration][Shortcuts]")
+    rc = set_key(rc, f"[Containments][{c}][Applets][{a}][Shortcuts]", "global", "Meta+A")
+    rc = del_group(rc, f"[Containments][{c}][Applets][{a}][Configuration]")
+
+# 3) Sin panel inferior: el dock lo dibuja vitrum-shell (Launchpad incluido)
+if dock:
+    for h in [h for h in groups(rc) if h.startswith(f"[Containments][{dock}]")]:
+        rc = del_group(rc, h)
+
+# 3b) Quitar separadores de márgenes entre applets
+for cont, sid in find(rc, "org.kde.plasma.marginsseparator", top):
+    rc = del_applet(rc, cont, sid)
+
+# 3c) Orden exacto de la barra de menús: [logo, nombreapp, appmenu, panelspacer, systemtray, spotlight, centrocontrol, digitalclock]
+ordered_plugins = [
+    "org.vitrum.menuapple",
+    "org.vitrum.nombreapp",
+    "org.kde.plasma.appmenu",
+    "org.kde.plasma.panelspacer",
+    "org.kde.plasma.systemtray",
+    "org.vitrum.spotlight",
+    "org.vitrum.centrocontrol",
+    "org.kde.plasma.digitalclock",
+]
+order_ids = []
+for plug in ordered_plugins:
+    found = find(rc, plug, top)
+    if found:
+        order_ids.append(found[0][1])
+rc = set_key(rc, f"[Containments][{top}][General]", "AppletOrder", ";".join(order_ids))
+
+# 3d) Bandeja mínima: red, volumen, brillo, Bluetooth… ya están en el Centro de Control.
+#     Quedan las notificaciones y los iconos de las apps; sin elementos ocultos no aparece la flecha.
+for h in list(groups(rc)):
+    m = re.fullmatch(r"\[Containments\]\[(\d+)\]\[Applets\]\[(\d+)\]", h)
+    if m:
+        s_, e_ = groups(rc)[h]
+        if re.search(r"^plugin=org.kde.plasma.systemtray$", rc[s_:e_], re.M):
+            g = h + "[General]"
+            rc = set_key(rc, g, "extraItems", "org.kde.plasma.notifications")
+            rc = set_key(rc, g, "knownItems", ",".join([
+                "org.kde.plasma.notifications", "org.kde.kdeconnect", "org.kde.plasma.vault", "org.kde.kscreen",
+                "org.kde.plasma.battery", "org.kde.plasma.bluetooth", "org.kde.plasma.brightness",
+                "org.kde.plasma.cameraindicator", "org.kde.plasma.clipboard", "org.kde.plasma.devicenotifier",
+                "org.kde.plasma.keyboardindicator", "org.kde.plasma.keyboardlayout", "org.kde.plasma.manage-inputmethod",
+                "org.kde.plasma.mediacontroller", "org.kde.plasma.networkmanagement", "org.kde.plasma.printmanager",
+                "org.kde.plasma.volume", "org.kde.plasma.weather"]))
+            rc = set_key(rc, g, "showAllItems", "true")
+            base = h[:-1]
+            for sub in [x for x in groups(rc) if x.startswith(base + "][Applets][")]:
+                m2 = re.match(re.escape(base) + r"\]\[Applets\]\[(\d+)\]", sub)
+                if not m2:
+                    continue
+                head = base + "][Applets][" + m2.group(1) + "]"
+                hs, he = groups(rc).get(head, (0, 0))
+                if not re.search(r"^plugin=org.kde.plasma.notifications$", rc[hs:he], re.M):
+                    rc = del_group(rc, sub)
+            rc = set_key(rc, g, "shownItems", "")
+            rc = set_key(rc, g, "hiddenItems", "")
+
+# 3e) Clic derecho en el escritorio: sin las entradas de KDE (sus ajustes nativos, terminal, modo edición…).
+#     "Cambiar fondo del escritorio…" y "Ajustes de pantallas…" llegan por un menú de servicio propio.
+cm = "[ActionPlugins][0][RightButton;NoModifier]"
+for key, val in (("_add panel", "false"), ("_context", "true"), ("_display_settings", "false"), ("_lock_screen", "false"),
+                 ("_logout", "false"), ("_open_terminal", "false"), ("_run_command", "false"), ("_wallpaper", "false"),
+                 ("add widgets", "false"), ("configure", "false"), ("edit mode", "false"), ("manage activities", "false"),
+                 ("remove", "false"), ("_sep1", "true"), ("_sep2", "false"), ("_sep3", "false"), ("_sep4", "false")):
+    rc = set_key(rc, cm, key, val)
+
+# 3f) Reloj como en macOS: misma letra que la barra de menús (no la escala automática, que la agranda)
+for cont, cid in find(rc, "org.kde.plasma.digitalclock", top):
+    g = f"[Containments][{cont}][Applets][{cid}][Configuration][Appearance]"
+    for key, val in (("autoFontAndSize", "false"), ("fontFamily", "Inter"), ("fontSize", "10"), ("fontWeight", "400"),
+                     ("boldText", "false"), ("showDate", "true"), ("dateFormat", "custom"),
+                     ("customDateFormat", "ddd d MMM"), ("dateDisplayFormat", "BesideTime"), ("use24hFormat", "2")):
+        rc = set_key(rc, g, key, val)
+
+# 4) Notificaciones con Super+N (applet anidado en la bandeja)
+for h in list(groups(rc)):
+    m = re.fullmatch(r"\[Containments\]\[(\d+)\]\[Applets\]\[(\d+)\]\[Applets\]\[(\d+)\]", h)
+    if m:
+        s, e = groups(rc)[h]
+        if re.search(r"^plugin=org.kde.plasma.notifications$", rc[s:e], re.M):
+            rc = del_group(rc, h + "[Configuration][Shortcuts]")
+            rc = set_key(rc, h + "[Shortcuts]", "global", "Meta+N")
+with open(RC, "w", encoding="utf-8") as f:
+    f.write(rc)
+
+# 4b) Altura (32 px) y barra pegada al borde (floating=0) en plasmashellrc
+ps = load(PS) if os.path.exists(PS) else ""
+ps = set_key(ps, f"[PlasmaViews][Panel {top}]", "floating", "0")
+ps = set_key(ps, f"[PlasmaViews][Panel {top}][Defaults]", "thickness", "32")
+for sub in [h for h in groups(ps) if h.startswith(f"[PlasmaViews][Panel {top}][Horizontal") or h.startswith(f"[PlasmaViews][Panel {top}][Vertical")]:
+    ps = set_key(ps, sub, "thickness", "32")
+with open(PS, "w", encoding="utf-8") as f:
+    f.write(ps)
+
+# 5) Atajos globales
+sc = load(SC) if os.path.exists(SC) else ""
+sc = set_key(sc, "[kwin]", "Walk Through Windows", r"Alt+Tab,Meta+Tab\tAlt+Tab,Recorrer las ventanas")
+sc = set_key(sc, "[kwin]", "Walk Through Windows (Reverse)", r"Alt+Shift+Tab,Meta+Shift+Tab\tAlt+Shift+Tab,Recorrer las ventanas (hacia atrás)")
+sc = set_key(sc, "[kwin]", "Overview", r"Meta+Tab\tMeta+W,Meta+W,Mission Control")
+sc = set_key(sc, "[plasmashell]", "next activity", "none,none,Recorrer las actividades")
+sc = set_key(sc, "[plasmashell]", "previous activity", "none,none,Recorrer las actividades (en orden inverso)")
+sc = set_key(sc, "[services][org.kde.krunner.desktop]", "_launch", "none,Alt+Space\\tAlt+F2\\tSearch,KRunner")
+sc = set_key(sc, "[services][org.vitrum.spotlight-atajo.desktop]", "_launch", r"Meta+Space\tAlt+Space\tMeta+S")
+sc = set_key(sc, "[plasmashell]", "activate application launcher", "Alt+F1,Meta\tAlt+F1,Activar el lanzador de aplicaciones")
+sc = set_key(sc, "[services][org.vitrum.launchpad.desktop]", "_launch", "Meta")
+sc = set_key(sc, "[services][org.vitrum.vistarapida.desktop]", "_launch", "Meta+Y")
+with open(SC, "w", encoding="utf-8") as f:
+    f.write(sc)
+
+# 6) Spotlight centrado; esquinas activas: abajo a la derecha muestra el escritorio (como Windows)
+kr = f"{HOME}/.config/krunnerrc"
+k = load(kr) if os.path.exists(kr) else ""
+k = set_key(k, "[General]", "FreeFloating", "true")
+with open(kr, "w", encoding="utf-8") as f:
+    f.write(k)
+kw = f"{HOME}/.config/kwinrc"
+k = load(kw) if os.path.exists(kw) else ""
+k = set_key(k, "[ModifierOnlyShortcuts]", "Meta", "org.vitrum.Shell,/Shell,org.vitrum.Shell,ToggleLaunchpad")
+k = set_key(k, "[Effect-overview]", "BorderActivate", "9")
+k = set_key(k, "[ElectricBorders]", "BottomRight", "ShowDesktop")
+with open(kw, "w", encoding="utf-8") as f:
+    f.write(k)
+
+# 7) Dolphin como Finder: barra de estado de ancho completo, iconos laterales de 16 px
+dr = f"{HOME}/.config/dolphinrc"
+d = load(dr) if os.path.exists(dr) else ""
+d = set_key(d, "[General]", "ShowStatusBar", "FullWidth")
+d = set_key(d, "[General]", "ShowZoomSlider", "false")
+d = set_key(d, "[PlacesPanel]", "IconSize", "16")
+with open(dr, "w", encoding="utf-8") as f:
+    f.write(d)
+print("disposición aplicada: barra de menús", top, "· panel inferior eliminado" if dock else "")

@@ -159,7 +159,17 @@ public:
 
     Q_INVOKABLE void launch(const QString &storageId)
     {
-        QProcess::startDetached(QStringLiteral("kstart"), {QStringLiteral("--application"), storageId});
+        const auto s = KService::serviceByStorageId(storageId);
+        QString id = s ? s->desktopEntryName() : storageId;
+        if (id.endsWith(QStringLiteral(".desktop"), Qt::CaseInsensitive))
+            id.chop(8);
+        if (KService::serviceByDesktopName(id)) {
+            QProcess::startDetached(QStringLiteral("kstart"), {QStringLiteral("--application"), id});
+        } else if (s && !s->entryPath().isEmpty()) {
+            QProcess::startDetached(QStringLiteral("kioclient"), {QStringLiteral("exec"), s->entryPath()});
+        } else {
+            QProcess::startDetached(QStringLiteral("kstart"), {QStringLiteral("--application"), id});
+        }
     }
 
     // Zona que recibe clics (el resto de la ventana deja pasar el ratón a lo que hay debajo).

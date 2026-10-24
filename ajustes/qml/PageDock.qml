@@ -157,44 +157,16 @@ Page {
             }
         }
     }
-    // Esquinas activas (macOS: hoja con una acción por esquina). KWin: [ElectricBorders] para acciones
-    // del sistema y la lista BorderActivate de Mission Control (índices: 1 arriba-dcha, 3 abajo-dcha,
-    // 5 abajo-izda, 7 arriba-izda)
-    SectionHeader { text: "Esquinas activas" }
-    Card {
-        Repeater {
-            model: [{ t: "Esquina superior izquierda", k: "TopLeft", i: 7 }, { t: "Esquina superior derecha", k: "TopRight", i: 1 },
-                    { t: "Esquina inferior izquierda", k: "BottomLeft", i: 5 }, { t: "Esquina inferior derecha", k: "BottomRight", i: 3 }]
-            RowItem {
-                title: modelData.t
-                MacPopup {
-                    readonly property var acts: ["None", "Overview", "ShowDesktop", "LockScreen", "AppWindows"]
-                    model: ["—", "Mission Control", "Escritorio", "Bloquear pantalla", "Ventanas de la app"]
-                    currentIndex: p.cornerAction(modelData.k, modelData.i)
-                    onActivated: (n) => p.setCorner(modelData.k, modelData.i, acts[n])
-                }
-            }
+    // Esquinas activas: como en macOS, un botón al pie de Escritorio y Dock que abre la hoja de esquinas
+    RowLayout {
+        Layout.fillWidth: true
+        Item { Layout.fillWidth: true }
+        MacButton {
+            text: "Esquinas activas…"
+            onClicked: { hotCorners.rev++; hotCorners.open() }
         }
     }
-    // listas de esquinas de los efectos: Mission Control (vista general) y ventanas de la app (vista de ventanas)
-    function lst(group, key) { return Sys.readConf("kwinrc", [group], key, "9").split(",").map(Number).filter(x => x !== 9 && !isNaN(x)) }
-    function cornerAction(key, i) {
-        if (lst("Effect-overview", "BorderActivate").indexOf(i) >= 0) return 1
-        if (lst("Effect-windowview", "BorderActivateClass").indexOf(i) >= 0) return 4
-        const a = Sys.readConf("kwinrc", ["ElectricBorders"], key, "None")
-        return a === "ShowDesktop" ? 2 : a === "LockScreen" ? 3 : 0
-    }
-    function setCorner(key, i, act) {
-        const put = (group, k, on) => {
-            const l = lst(group, k).filter(x => x !== i)
-            if (on) l.push(i)
-            Sys.writeConf("kwinrc", [group], k, l.length ? l.join(",") : "9")
-        }
-        put("Effect-overview", "BorderActivate", act === "Overview")
-        put("Effect-windowview", "BorderActivateClass", act === "AppWindows")
-        Sys.writeConf("kwinrc", ["ElectricBorders"], key, act === "ShowDesktop" || act === "LockScreen" ? act : "None")
-        p.kwinReconfigure()
-    }
+    HotCorners { id: hotCorners }
 
     KdeOptions {
         page: p

@@ -252,7 +252,7 @@ sc = set_key(sc, "[services][org.vitrum.vistarapida.desktop]", "_launch", "Meta+
 with open(SC, "w", encoding="utf-8") as f:
     f.write(sc)
 
-# 6) Spotlight centrado; esquinas activas: abajo a la derecha muestra el escritorio (como Windows)
+# 6) Spotlight centrado; esquinas activas (solo la primera vez): abajo a la derecha muestra el escritorio
 kr = f"{HOME}/.config/krunnerrc"
 k = load(kr) if os.path.exists(kr) else ""
 k = set_key(k, "[General]", "FreeFloating", "true")
@@ -261,8 +261,10 @@ with open(kr, "w", encoding="utf-8") as f:
 kw = f"{HOME}/.config/kwinrc"
 k = load(kw) if os.path.exists(kw) else ""
 k = set_key(k, "[ModifierOnlyShortcuts]", "Meta", "org.vitrum.Shell,/Shell,org.vitrum.Shell,ToggleLaunchpad")
-k = set_key(k, "[Effect-overview]", "BorderActivate", "9")
-k = set_key(k, "[ElectricBorders]", "BottomRight", "ShowDesktop")
+# esquinas activas: valores iniciales solo si nunca se han configurado (Ajustes → Escritorio y Dock → Esquinas activas…)
+if "[ElectricBorders]" not in k:
+    k = set_key(k, "[Effect-overview]", "BorderActivate", "9")
+    k = set_key(k, "[ElectricBorders]", "BottomRight", "ShowDesktop")
 with open(kw, "w", encoding="utf-8") as f:
     f.write(k)
 

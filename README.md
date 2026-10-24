@@ -92,7 +92,7 @@ Si deseas utilizar o adaptar este entorno en **CachyOS** o cualquier derivada de
   ```
 
 ### 4. Pantalla de inicio de sesión (`--login`)
-* La opción `--login` de `install.sh` está diseñada específicamente para `plasma-login-manager` (el greeter de Fedora sobre systemd-homed).
+* La opción `--login` de `install.sh` está diseñada específicamente para `plasma-login-manager` (Plasma Login, el gestor de inicio de sesión de Plasma que Fedora usa en lugar de SDDM).
 * CachyOS utiliza **SDDM** como gestor de inicio de sesión. Por tanto:
   * **No ejecutes `install.sh --login` en CachyOS/Arch** (la pantalla de inicio de sesión original de SDDM no debe reemplazarse con este script).
   * La **pantalla de bloqueo** (`bloqueo/`), en cambio, sí es 100 % compatible ya que funciona sobre `kscreenlocker` dentro de la sesión de KWin.
@@ -113,4 +113,6 @@ Para realizar pruebas o desarrollar componentes sin reinstalar todo el entorno:
 # Desplegar en un usuario de pruebas aislado (ej: 'vitrum'):
 ./scripts/desplegar-ajustes --usuario vitrum
 ```
+
+Además de Ajustes, despliega el Centro de Control, el menú del logo, los iconos, el dock y sus servicios, los atajos de macOS (`vitrum-atajos-guardian.sh`), el desenfoque, la pantalla de bloqueo y el ajuste de Zen Browser. Los fondos animados de Wallpaper Engine (waywallen) se instalan aparte con `--waywallen`.
 

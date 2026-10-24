@@ -414,7 +414,13 @@ Window {
             const items = [], acts = []
             const add = (text, f) => { items.push({ text: text }); acts.push(f) }
             const sep = () => { items.push({ separator: true }); acts.push(null) }
-            if (model.CanLaunchNewInstance !== false) { add("Nueva ventana", () => tasks.requestNewInstance(tasks.makeModelIndex(index))); sep() }
+            // muchas apps no declaran que admiten varias instancias, pero abren otra ventana al lanzarlas de nuevo
+            const appId = String(model.AppId || "")
+            if (model.CanLaunchNewInstance !== false || appId) {
+                add("Nueva ventana", () => model.CanLaunchNewInstance !== false ? tasks.requestNewInstance(tasks.makeModelIndex(index))
+                                                                             : Sys.launch(appId))
+                sep()
+            }
             add(kept ? "Eliminar del Dock" : "Mantener en el Dock", () => {
                 const id = dock.launcherId(launcher)
                 const list = dock.pinned.slice()

@@ -7,12 +7,14 @@
 #   ./scripts/desplegar-ajustes --compilar          # Despliega y recompila vitrum-ajustes en tu usuario
 #   ./scripts/desplegar-ajustes --usuario vitrum    # Despliega en el usuario de pruebas 'vitrum' (con sudo)
 #   ./scripts/desplegar-ajustes -u vitrum -c       # Despliega y compila en el usuario 'vitrum'
+#   ./scripts/desplegar-ajustes --waywallen         # Además instala/actualiza los fondos animados (waywallen)
 # ==============================================================================
 set -euo pipefail
 
 REPO_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 TARGET_USER="$USER"
 COMPILAR=false
+WAYWALLEN=false
 
 mostrar_ayuda() {
     cat <<EOF
@@ -21,6 +23,7 @@ Uso: $(basename "$0") [opciones]
 Opciones:
   -u, --usuario <nombre>   Usuario destino donde desplegar (por defecto: usuario actual '$USER')
   -c, --compilar           Recompila la app de Ajustes (vitrum-ajustes) en contenedor Podman
+  -w, --waywallen          Instala/actualiza waywallen (fondos animados de Wallpaper Engine)
   -h, --ayuda              Muestra este mensaje de ayuda
 
 Ejemplos:
@@ -40,6 +43,10 @@ while [ $# -gt 0 ]; do
             ;;
         -c|--compilar)
             COMPILAR=true
+            shift
+            ;;
+        -w|--waywallen)
+            WAYWALLEN=true
             shift
             ;;
         -h|--ayuda)
@@ -200,21 +207,24 @@ EOT
 ln -sf ../vitrum-modo.timer ~/.config/systemd/user/timers.target.wants/vitrum-modo.timer
 '
 
-# 8. Permisos de KWin para el dock
-ejecutar_en_destino '
-f=~/.local/share/applications/org.vitrum.ajustes.desktop
-if [ -f "$f" ]; then
-    sed -i "/^X-KDE-Wayland-Interfaces/d" "$f"
-    echo "X-KDE-Wayland-Interfaces=org_kde_plasma_window_management,org_kde_plasma_activation_feedback,zkde_screencast_unstable_v1" >> "$f"
-fi
-'
+# 8. Permisos de KWin para el dock: KWin solo deja capturar ventanas (miniaturas de la vista previa) y gestionar
+#    ventanas a la app cuyo .desktop lo declara; se crea si no existe (cuenta nueva desplegada sin install.sh)
+ejecutar_en_destino "
+mkdir -p ~/.local/share/applications
+cat > ~/.local/share/applications/org.vitrum.ajustes.desktop <<EOT
+[Desktop Entry]
+Type=Application
+Name=Ajustes del Sistema
+Comment=Configura el escritorio
+Exec=$TARGET_HOME/.local/bin/vitrum-ajustes %u
+Icon=preferences-system
+Categories=Settings;
+StartupWMClass=org.vitrum.ajustes
+X-KDE-Wayland-Interfaces=org_kde_plasma_window_management,org_kde_plasma_activation_feedback,zkde_screencast_unstable_v1
+EOT
+"
 
-# 9. Nombre de la app activa
-sincronizar_src "nombre-app"
-ejecutar_en_destino '
-rm -rf ~/.local/share/plasma/plasmoids/org.vitrum.nombreapp
-cp -r ~/.cache/vitrum-src/nombre-app ~/.local/share/plasma/plasmoids/org.vitrum.nombreapp
-'
+# 9. El nombre de la app activa ya no va en la barra de menús (vitrum-disposicion lo quita): no se instala
 
 # 10. Desactivar KRunner en favor de Spotlight
 ejecutar_en_destino '
@@ -232,6 +242,8 @@ ejecutar_en_destino '
 cp ~/.cache/vitrum-src/scripts/vitrum-desenfoque-construir ~/.local/bin/
 mkdir -p ~/.config/plasma-workspace/env ~/.local/share/vitrum ~/.local/lib64/qt6/plugins/kwin/effects/plugins
 cp ~/.cache/vitrum-src/integracion/vitrum-desenfoque-guardian.sh ~/.config/plasma-workspace/env/
+# atajos de macOS (Super, Super+Espacio, Alt+Espacio…): se fijan al iniciar sesión, antes que KWin
+cp ~/.cache/vitrum-src/integracion/vitrum-atajos-guardian.sh ~/.config/plasma-workspace/env/
 
 f=~/.cache/vitrum-src/kd-out/vitrumblur.so
 d=~/.local/lib64/qt6/plugins/kwin/effects/plugins
@@ -253,5 +265,21 @@ WantedBy=plasma-workspace.target
 EOT
 ln -sf ../vitrum-desenfoque.service ~/.config/systemd/user/plasma-workspace.target.wants/vitrum-desenfoque.service
 '
+
+# 12. Pantalla de bloqueo estilo Sequoia (capa local sobre la de KDE; «bloqueo/instalar.sh --quitar» la quita)
+sincronizar_src "bloqueo"
+ejecutar_en_destino 'bash ~/.cache/vitrum-src/bloqueo/instalar.sh ~/.cache/vitrum-src/bloqueo >/dev/null'
+
+# 13. Zen Browser (si está instalado): esquinas de 10 px como el resto de ventanas
+ejecutar_en_destino '
+cp ~/.cache/vitrum-src/scripts/vitrum-zen ~/.cache/vitrum-src/scripts/vitrum-waywallen ~/.local/bin/
+~/.local/bin/vitrum-zen ~/.cache/vitrum-src/integracion || true
+'
+
+# 14. Fondos animados (waywallen): solo con --waywallen (instala una Flatpak y descarga sus complementos)
+if [ "$WAYWALLEN" = true ]; then
+    echo "    Instalando waywallen (fondos animados)..."
+    ejecutar_en_destino '~/.local/bin/vitrum-waywallen || true'
+fi
 
 echo "==> Despliegue completado con éxito en $TARGET_HOME."

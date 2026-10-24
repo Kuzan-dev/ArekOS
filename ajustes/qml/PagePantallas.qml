@@ -121,6 +121,7 @@ Page {
             }
         }
     }
+    HotCorners { id: hotCornersP }
     Connections {
         target: Sys
         function onFinished(tag, code, out) {
@@ -391,6 +392,7 @@ Page {
         Layout.fillWidth: true
         Item { Layout.fillWidth: true }
         MacButton { text: "Night Shift…"; onClicked: p.kcm("kcm_nightlight") }
+        MacButton { text: "Esquinas activas…"; onClicked: { hotCornersP.rev++; hotCornersP.open() } }
         MacButton { text: "Disposición y avanzado…"; onClicked: p.kcm("kcm_kscreen") }
     }
 }

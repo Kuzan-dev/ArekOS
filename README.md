@@ -56,3 +56,61 @@ Se conservan intactos `Ctrl+C`, `Ctrl+V`, `Ctrl+Z`, `Alt+Tab`, etc., y las funci
 - **`Super + A`:** Centro de Control
 - **`Super + N`:** Centro de Notificaciones
 - **`Super + Y`:** Vista rápida del archivo seleccionado en Dolphin
+
+---
+
+## 🐧 Adaptación para CachyOS / Arch Linux (Guía de portabilidad)
+
+ArekOS fue desarrollado y probado inicialmente sobre **Fedora 44 con KDE Plasma 6 (Wayland)**. La gran mayoría de los componentes (plasmoides QML, temas de Plasma, iconos WhiteSur, atajos y scripts KConfig) son 100 % compatibles con cualquier distribución que use Plasma 6.
+
+Si deseas utilizar o adaptar este entorno en **CachyOS** o cualquier derivada de **Arch Linux**, ten en cuenta los siguientes puntos técnicos:
+
+### 1. Compilación nativa en lugar de binarios precompilados
+* Los binarios incluidos en `binarios/` y el contenedor Podman en `install.sh` están construidos con la cadena de bibliotecas de Fedora (glibc, Qt 6.x y KWin específicos).
+* En CachyOS (rolling release), los plugins C++ (`vitrumblur.so`, `org.vitrum.decoracion.so`, `darkly6.so` y `vitrum-ajustes`) deben **compilarse nativamente** para enlazar con las versiones exactas del sistema host:
+  ```bash
+  # Paquetes requeridos en Arch / CachyOS:
+  sudo pacman -S --needed cmake extra-cmake-modules gcc git base-devel \
+      qt6-base qt6-declarative kwin kdecoration kf6-kservice kf6-kcmutils \
+      kf6-kcoreaddons kf6-kcolorscheme kf6-kguiaddons kf6-ki18n kf6-kiconthemes \
+      kf6-frameworkintegration kirigami libepoxy wayland libxcb libdrm \
+      mesa libxkbcommon pipewire lcms2 libdisplay-info zstd
+  ```
+
+### 2. Detección de versiones del sistema
+* En `install.sh`, la verificación de la versión de KWin utiliza `rpm -q kwin`.
+* En CachyOS / Arch se debe consultar mediante pacman:
+  ```bash
+  KWIN_VER="$(pacman -Q kwin 2>/dev/null | awk '{print $2}' || echo unknown)"
+  ```
+
+### 3. Rutas de bibliotecas Qt6 (`lib` vs `lib64`)
+* Arch y CachyOS instalan bibliotecas en `/usr/lib/` y esperan plugins de usuario en `$HOME/.local/lib/qt6/plugins/` (en lugar de `lib64`).
+* Para asegurar compatibilidad total, añade ambas rutas a la variable de entorno:
+  ```bash
+  QT_PLUGIN_PATH="$HOME/.local/lib/qt6/plugins:$HOME/.local/lib64/qt6/plugins:${QT_PLUGIN_PATH:-}"
+  ```
+
+### 4. Pantalla de inicio de sesión (`--login`)
+* La opción `--login` de `install.sh` está diseñada específicamente para `plasma-login-manager` (el greeter de Fedora sobre systemd-homed).
+* CachyOS utiliza **SDDM** como gestor de inicio de sesión. Por tanto:
+  * **No ejecutes `install.sh --login` en CachyOS/Arch** (la pantalla de inicio de sesión original de SDDM no debe reemplazarse con este script).
+  * La **pantalla de bloqueo** (`bloqueo/`), en cambio, sí es 100 % compatible ya que funciona sobre `kscreenlocker` dentro de la sesión de KWin.
+
+---
+
+## Desarrollo y despliegue rápido (`desplegar-ajustes`)
+
+Para realizar pruebas o desarrollar componentes sin reinstalar todo el entorno:
+
+```bash
+# Desplegar cambios en tu sesión actual:
+./scripts/desplegar-ajustes
+
+# Desplegar y recompilar la app de Ajustes en tu sesión:
+./scripts/desplegar-ajustes --compilar
+
+# Desplegar en un usuario de pruebas aislado (ej: 'vitrum'):
+./scripts/desplegar-ajustes --usuario vitrum
+```
+

@@ -1,54 +1,157 @@
 #!/bin/bash
-# Copia ~/vitrum-kde a la cuenta vitrum y (con --compilar) compila la app de Ajustes en un contenedor
-# con las mismas versiones de Qt/KDE que el sistema.
-set -e
-tar -C ~/vitrum-kde -cf - ajustes scripts | sudo -n -u vitrum tar -C /home/vitrum/.cache/vitrum-src -xf -
-sudo -n -u vitrum -H bash -c '
+# ==============================================================================
+# ArekOS (Vitrum KDE) — Despliegue rápido de Ajustes y componentes de escritorio
+#
+# Uso:
+#   ./scripts/desplegar-ajustes                     # Despliega en tu usuario actual
+#   ./scripts/desplegar-ajustes --compilar          # Despliega y recompila vitrum-ajustes en tu usuario
+#   ./scripts/desplegar-ajustes --usuario vitrum    # Despliega en el usuario de pruebas 'vitrum' (con sudo)
+#   ./scripts/desplegar-ajustes -u vitrum -c       # Despliega y compila en el usuario 'vitrum'
+# ==============================================================================
+set -euo pipefail
+
+REPO_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+TARGET_USER="$USER"
+COMPILAR=false
+
+mostrar_ayuda() {
+    cat <<EOF
+Uso: $(basename "$0") [opciones]
+
+Opciones:
+  -u, --usuario <nombre>   Usuario destino donde desplegar (por defecto: usuario actual '$USER')
+  -c, --compilar           Recompila la app de Ajustes (vitrum-ajustes) en contenedor Podman
+  -h, --ayuda              Muestra este mensaje de ayuda
+
+Ejemplos:
+  $(basename "$0")                     # Despliegue rápido en tu sesión actual
+  $(basename "$0") --compilar          # Despliega y recompila en tu sesión
+  $(basename "$0") --usuario vitrum    # Despliega en la cuenta de pruebas 'vitrum'
+EOF
+    exit 0
+}
+
+while [ $# -gt 0 ]; do
+    case "$1" in
+        -u|--usuario)
+            [ $# -gt 1 ] || { echo "Error: --usuario requiere un nombre de usuario"; exit 1; }
+            TARGET_USER="$2"
+            shift 2
+            ;;
+        -c|--compilar)
+            COMPILAR=true
+            shift
+            ;;
+        -h|--ayuda)
+            mostrar_ayuda
+            ;;
+        *)
+            echo "Opción desconocida: $1"
+            echo "Usa --ayuda para ver las opciones disponibles."
+            exit 1
+            ;;
+    esac
+done
+
+TARGET_HOME="$(getent passwd "$TARGET_USER" | cut -d: -f6)"
+[ -n "$TARGET_HOME" ] && [ -d "$TARGET_HOME" ] || { echo "Error: no se encontró el directorio home para el usuario '$TARGET_USER'"; exit 1; }
+
+echo "==> Desplegando ArekOS para el usuario: $TARGET_USER ($TARGET_HOME)"
+if [ "$TARGET_USER" != "$USER" ]; then
+    [ "$(id -u)" = 0 ] || sudo -v
+fi
+
+# Función para ejecutar comandos en el contexto del usuario destino
+ejecutar_en_destino() {
+    if [ "$TARGET_USER" = "$USER" ]; then
+        bash -c "$1"
+    else
+        sudo -u "$TARGET_USER" -H bash -c "$1"
+    fi
+}
+
+# Sincronizar directorio de código hacia ~/.cache/vitrum-src
+sincronizar_src() {
+    local carpeta="$1"
+    ejecutar_en_destino "mkdir -p ~/.cache/vitrum-src"
+    if [ "$TARGET_USER" = "$USER" ]; then
+        rm -rf "$TARGET_HOME/.cache/vitrum-src/$carpeta"
+        cp -r "$REPO_DIR/$carpeta" "$TARGET_HOME/.cache/vitrum-src/"
+    else
+        tar -C "$REPO_DIR" -cf - "$carpeta" | sudo -u "$TARGET_USER" tar -C "$TARGET_HOME/.cache/vitrum-src" -xf -
+    fi
+}
+
+# 1. Sincronizar ajustes y scripts
+sincronizar_src "ajustes"
+sincronizar_src "scripts"
+
+ejecutar_en_destino '
 set -e
 mkdir -p ~/.local/share/vitrum-ajustes ~/.local/bin
 rm -rf ~/.local/share/vitrum-ajustes/qml && cp -r ~/.cache/vitrum-src/ajustes/qml ~/.local/share/vitrum-ajustes/
-cp ~/.cache/vitrum-src/scripts/vitrum-modo ~/.cache/vitrum-src/scripts/vitrum-plasma-set ~/.cache/vitrum-src/scripts/vitrum-disposicion ~/.cache/vitrum-src/scripts/vitrum-esquemas ~/.cache/vitrum-src/scripts/vitrum-klassy ~/.cache/vitrum-src/scripts/vitrum-bandeja ~/.cache/vitrum-src/scripts/vitrum-brillo ~/.cache/vitrum-src/scripts/vitrum-raton ~/.cache/vitrum-src/scripts/vitrum-pantalla-cambio ~/.local/bin/
+cp ~/.cache/vitrum-src/scripts/vitrum-modo \
+   ~/.cache/vitrum-src/scripts/vitrum-plasma-set \
+   ~/.cache/vitrum-src/scripts/vitrum-disposicion \
+   ~/.cache/vitrum-src/scripts/vitrum-esquemas \
+   ~/.cache/vitrum-src/scripts/vitrum-klassy \
+   ~/.cache/vitrum-src/scripts/vitrum-bandeja \
+   ~/.cache/vitrum-src/scripts/vitrum-brillo \
+   ~/.cache/vitrum-src/scripts/vitrum-raton \
+   ~/.cache/vitrum-src/scripts/vitrum-pantalla-cambio ~/.local/bin/
 '
-if [ "${1:-}" = --compilar ]; then
-sudo -n -u vitrum -H bash -c '
-cd ~; unset SUDO_UID SUDO_GID SUDO_USER SUDO_COMMAND; export XDG_RUNTIME_DIR=/tmp/vitrum-podman; mkdir -p -m 700 $XDG_RUNTIME_DIR
-cd ~/.cache/vitrum-src; rm -rf aj-out; mkdir aj-out
-podman run --rm -v $PWD/ajustes:/src:Z,ro -v $PWD/aj-out:/out:Z registry.fedoraproject.org/fedora:44 bash -c "
-dnf -y -q --disablerepo=updates install --setopt=install_weak_deps=False cmake gcc-c++ extra-cmake-modules qt6-qtdeclarative-devel kf6-kwindowsystem-devel kf6-kconfig-devel kf6-kservice-devel kf6-kcmutils-devel kf6-kcoreaddons-devel >/dev/null 2>&1 || { echo DNF_FAIL; exit 1; }
-cmake -S /src -B /tmp/b -DCMAKE_BUILD_TYPE=Release >/tmp/c.log 2>&1 || { tail -15 /tmp/c.log; exit 1; }
-cmake --build /tmp/b -j16 >/tmp/m.log 2>&1 || { grep -A3 error /tmp/m.log | head -30; exit 1; }
-cp /tmp/b/vitrum-ajustes /out/ && echo COMPILADO" 2>&1 | grep -v level=warn
-cp aj-out/vitrum-ajustes ~/.local/bin/vitrum-ajustes.nuevo && mv -f ~/.local/bin/vitrum-ajustes.nuevo ~/.local/bin/vitrum-ajustes
-'
+
+# 2. Recompilación de vitrum-ajustes si se solicita
+if [ "$COMPILAR" = true ]; then
+    echo "    Compilando vitrum-ajustes con Podman..."
+    ejecutar_en_destino '
+    set -e
+    cd ~; unset SUDO_UID SUDO_GID SUDO_USER SUDO_COMMAND; export XDG_RUNTIME_DIR="${XDG_RUNTIME_DIR:-/tmp/vitrum-podman}"; mkdir -p -m 700 "$XDG_RUNTIME_DIR"
+    cd ~/.cache/vitrum-src; rm -rf aj-out; mkdir -p aj-out
+    podman run --rm -v $PWD/ajustes:/src:Z,ro -v $PWD/aj-out:/out:Z registry.fedoraproject.org/fedora:44 bash -c "
+    dnf -y -q --disablerepo=updates install --setopt=install_weak_deps=False cmake gcc-c++ extra-cmake-modules qt6-qtdeclarative-devel kf6-kwindowsystem-devel kf6-kconfig-devel kf6-kservice-devel kf6-kcmutils-devel kf6-kcoreaddons-devel >/dev/null 2>&1 || { echo DNF_FAIL; exit 1; }
+    cmake -S /src -B /tmp/b -DCMAKE_BUILD_TYPE=Release >/tmp/c.log 2>&1 || { tail -15 /tmp/c.log; exit 1; }
+    cmake --build /tmp/b -j\$(nproc) >/tmp/m.log 2>&1 || { grep -A3 error /tmp/m.log | head -30; exit 1; }
+    cp /tmp/b/vitrum-ajustes /out/ && echo COMPILADO" 2>&1 | grep -v level=warn
+    cp aj-out/vitrum-ajustes ~/.local/bin/vitrum-ajustes.nuevo && mv -f ~/.local/bin/vitrum-ajustes.nuevo ~/.local/bin/vitrum-ajustes
+    '
 fi
 
-# Centro de Control (widget de Plasma) y su script de estado
-tar -C ~/vitrum-kde -cf - centro-control | sudo -n -u vitrum tar -C /home/vitrum/.cache/vitrum-src -xf -
-sudo -n -u vitrum -H bash -c '
+# 3. Centro de Control (widget de Plasma) y scripts de estado
+sincronizar_src "centro-control"
+ejecutar_en_destino '
 mkdir -p ~/.local/share/plasma/plasmoids
 rm -rf ~/.local/share/plasma/plasmoids/org.vitrum.centrocontrol
 cp -r ~/.cache/vitrum-src/centro-control ~/.local/share/plasma/plasmoids/org.vitrum.centrocontrol
 cp ~/.cache/vitrum-src/scripts/vitrum-cc-estado ~/.cache/vitrum-src/scripts/vitrum-cc-detalle ~/.local/bin/
 '
 
-# Menú del sistema (logo)
-tar -C ~/vitrum-kde -cf - menu-apple | sudo -n -u vitrum tar -C /home/vitrum/.cache/vitrum-src -xf -
-sudo -n -u vitrum -H bash -c 'rm -rf ~/.local/share/plasma/plasmoids/org.vitrum.menuapple; cp -r ~/.cache/vitrum-src/menu-apple ~/.local/share/plasma/plasmoids/org.vitrum.menuapple'
+# 4. Menú del sistema (logo)
+sincronizar_src "menu-apple"
+ejecutar_en_destino '
+mkdir -p ~/.local/share/plasma/plasmoids
+rm -rf ~/.local/share/plasma/plasmoids/org.vitrum.menuapple
+cp -r ~/.cache/vitrum-src/menu-apple ~/.local/share/plasma/plasmoids/org.vitrum.menuapple
+'
 
-# Iconos propios
-tar -C ~/vitrum-kde -cf - iconos | sudo -n -u vitrum tar -C /home/vitrum/.cache/vitrum-src -xf -
-sudo -n -u vitrum -H bash -c 'mkdir -p ~/.local/share/icons/hicolor/scalable/apps; cp ~/.cache/vitrum-src/iconos/*.svg ~/.local/share/icons/hicolor/scalable/apps/'
+# 5. Iconos propios
+sincronizar_src "iconos"
+ejecutar_en_destino '
+mkdir -p ~/.local/share/icons/hicolor/scalable/apps
+cp ~/.cache/vitrum-src/iconos/*.svg ~/.local/share/icons/hicolor/scalable/apps/
+'
 
-# Integración: Vista rápida (menú contextual de Dolphin + Super+Y)
-tar -C ~/vitrum-kde -cf - integracion | sudo -n -u vitrum tar -C /home/vitrum/.cache/vitrum-src -xf -
-sudo -n -u vitrum -H bash -c '
-mkdir -p ~/.local/share/kio/servicemenus ~/.local/share/applications
+# 6. Integración y servicios (Vista rápida, Dock, Launchpad, Spotlight)
+sincronizar_src "integracion"
+ejecutar_en_destino "
+set -e
+mkdir -p ~/.local/share/kio/servicemenus ~/.local/share/applications ~/.config/autostart ~/.config/systemd/user/plasma-workspace.target.wants ~/.local/share/dbus-1/services
 cp ~/.cache/vitrum-src/integracion/vitrum-vista-rapida.desktop ~/.cache/vitrum-src/integracion/vitrum-escritorio.desktop ~/.local/share/kio/servicemenus/
 chmod +x ~/.local/share/kio/servicemenus/vitrum-*.desktop
 cp ~/.cache/vitrum-src/integracion/org.vitrum.vistarapida.desktop ~/.cache/vitrum-src/integracion/org.vitrum.spotlight-atajo.desktop ~/.cache/vitrum-src/integracion/org.vitrum.launchpad.desktop ~/.local/share/applications/
-# dock/Launchpad/Spotlight: servicio de usuario (se reinicia solo si falla); sustituye al antiguo autostart
-rm -f ~/.config/autostart/vitrum-shell.desktop; mkdir -p ~/.config/autostart
-mkdir -p ~/.config/systemd/user/plasma-workspace.target.wants
+
+# dock/Launchpad/Spotlight: servicio de usuario
+rm -f ~/.config/autostart/vitrum-shell.desktop
 cat > ~/.config/systemd/user/vitrum-shell.service <<EOT
 [Unit]
 Description=Vitrum: dock, Launchpad y Spotlight
@@ -63,19 +166,21 @@ Slice=session.slice
 WantedBy=plasma-workspace.target
 EOT
 ln -sf ../vitrum-shell.service ~/.config/systemd/user/plasma-workspace.target.wants/vitrum-shell.service
-# activación por D-Bus: si el dock no está corriendo, Super/Alt+Espacio/la lupa lo arrancan
-mkdir -p ~/.local/share/dbus-1/services
-printf "[D-BUS Service]\nName=org.vitrum.Shell\nExec=/home/vitrum/.local/bin/vitrum-ajustes --shell\nSystemdService=vitrum-shell.service\n" > ~/.local/share/dbus-1/services/org.vitrum.Shell.service
-# el puente de vídeo de XWayland deja un icono de monitor en la barra que no hace nada útil
-printf "[Desktop Entry]\nHidden=true\n" > ~/.config/autostart/org.kde.xwaylandvideobridge.desktop
-cp ~/.cache/vitrum-src/scripts/vitrum-vista-rapida ~/.local/bin/
-'
 
-# Lupa de Spotlight y temporizador del modo automático
-tar -C ~/vitrum-kde -cf - spotlight | sudo -n -u vitrum tar -C /home/vitrum/.cache/vitrum-src -xf -
-sudo -n -u vitrum -H bash -c '
-rm -rf ~/.local/share/plasma/plasmoids/org.vitrum.spotlight; cp -r ~/.cache/vitrum-src/spotlight ~/.local/share/plasma/plasmoids/org.vitrum.spotlight
-mkdir -p ~/.config/systemd/user
+# Activación por D-Bus usando la ruta del usuario destino
+printf '[D-BUS Service]\nName=org.vitrum.Shell\nExec=%s/.local/bin/vitrum-ajustes --shell\nSystemdService=vitrum-shell.service\n' \"$TARGET_HOME\" > ~/.local/share/dbus-1/services/org.vitrum.Shell.service
+
+# Ocultar icono de puente de vídeo XWayland
+printf '[Desktop Entry]\nHidden=true\n' > ~/.config/autostart/org.kde.xwaylandvideobridge.desktop
+cp ~/.cache/vitrum-src/scripts/vitrum-vista-rapida ~/.local/bin/
+"
+
+# 7. Spotlight y temporizador de modo automático
+sincronizar_src "spotlight"
+ejecutar_en_destino '
+rm -rf ~/.local/share/plasma/plasmoids/org.vitrum.spotlight
+cp -r ~/.cache/vitrum-src/spotlight ~/.local/share/plasma/plasmoids/org.vitrum.spotlight
+mkdir -p ~/.config/systemd/user/timers.target.wants
 cat > ~/.config/systemd/user/vitrum-modo.service <<EOT
 [Unit]
 Description=Vitrum: cambia entre claro y oscuro en modo automático
@@ -92,70 +197,49 @@ OnUnitActiveSec=10min
 [Install]
 WantedBy=timers.target
 EOT
-mkdir -p ~/.config/systemd/user/timers.target.wants
 ln -sf ../vitrum-modo.timer ~/.config/systemd/user/timers.target.wants/vitrum-modo.timer
 '
 
-# Permisos de KWin para el dock (activar ventanas y ver qué apps se están abriendo)
-sudo -n -u vitrum -H bash -c '
+# 8. Permisos de KWin para el dock
+ejecutar_en_destino '
 f=~/.local/share/applications/org.vitrum.ajustes.desktop
-# (zkde_screencast: miniaturas en vivo de la vista previa de ventanas del Dock)
-sed -i "/^X-KDE-Wayland-Interfaces/d" $f
-echo "X-KDE-Wayland-Interfaces=org_kde_plasma_window_management,org_kde_plasma_activation_feedback,zkde_screencast_unstable_v1" >> $f
+if [ -f "$f" ]; then
+    sed -i "/^X-KDE-Wayland-Interfaces/d" "$f"
+    echo "X-KDE-Wayland-Interfaces=org_kde_plasma_window_management,org_kde_plasma_activation_feedback,zkde_screencast_unstable_v1" >> "$f"
+fi
 '
 
-# Nombre de la app activa en la barra de menús
-tar -C ~/vitrum-kde -cf - nombre-app | sudo -n -u vitrum tar -C /home/vitrum/.cache/vitrum-src -xf -
-sudo -n -u vitrum -H bash -c 'rm -rf ~/.local/share/plasma/plasmoids/org.vitrum.nombreapp; cp -r ~/.cache/vitrum-src/nombre-app ~/.local/share/plasma/plasmoids/org.vitrum.nombreapp'
-
-# Estilo de apps Darkly (compilado en ~/.cache/vitrum-src/dk-out): solo el estilo y su configuración
-sudo -n -u vitrum -H bash -c '
-o=~/.cache/vitrum-src/dk-out/home/vitrum/.local
-[ -f $o/lib64/qt6/plugins/styles/darkly6.so ] || exit 0
-mkdir -p ~/.local/lib64/qt6/plugins/styles ~/.local/lib64/qt6/plugins/kstyle_config ~/.local/share/kstyle/themes
-# instalación atómica: sobrescribir en el sitio una biblioteca cargada (KWin, Plasma…) los hace caer
-for f in styles/darkly6.so kstyle_config/darklystyleconfig.so; do
-    cmp -s $o/lib64/qt6/plugins/$f ~/.local/lib64/qt6/plugins/$f && continue
-    cp $o/lib64/qt6/plugins/$f ~/.local/lib64/qt6/plugins/$f.nuevo && mv -f ~/.local/lib64/qt6/plugins/$f.nuevo ~/.local/lib64/qt6/plugins/$f
-done
-cp $o/share/kstyle/themes/darkly.themerc ~/.local/share/kstyle/themes/
+# 9. Nombre de la app activa
+sincronizar_src "nombre-app"
+ejecutar_en_destino '
+rm -rf ~/.local/share/plasma/plasmoids/org.vitrum.nombreapp
+cp -r ~/.cache/vitrum-src/nombre-app ~/.local/share/plasma/plasmoids/org.vitrum.nombreapp
 '
 
-# KRunner fuera: Spotlight de Vitrum usa sus módulos de búsqueda dentro de su propio proceso
-sudo -n -u vitrum -H bash -c '
-mkdir -p ~/.local/share/dbus-1/services ~/.config/systemd/user
+# 10. Desactivar KRunner en favor de Spotlight
+ejecutar_en_destino '
+mkdir -p ~/.local/share/dbus-1/services ~/.config/systemd/user ~/.local/share/kglobalaccel
 printf "[D-BUS Service]\nName=org.kde.krunner\nExec=/bin/false\n" > ~/.local/share/dbus-1/services/org.kde.krunner.service
 ln -sfn /dev/null ~/.config/systemd/user/plasma-krunner.service
+if [ -f /usr/share/kglobalaccel/org.kde.krunner.desktop ]; then
+    sed "s/^X-KDE-Shortcuts=Alt+Space,Alt+F2,Search$/X-KDE-Shortcuts=Alt+F2,Search/" /usr/share/kglobalaccel/org.kde.krunner.desktop > ~/.local/share/kglobalaccel/org.kde.krunner.desktop
+fi
 '
 
-# Decoración de ventanas Vitrum (semáforos de macOS), compilada en ~/.cache/vitrum-src/deco-out
-sudo -n -u vitrum -H bash -c '
-f=~/.cache/vitrum-src/deco-out/org.vitrum.decoracion.so; d=~/.local/lib64/qt6/plugins/org.kde.kdecoration3
-[ -f $f ] || exit 0
-mkdir -p $d
-cmp -s $f $d/org.vitrum.decoracion.so || { cp $f $d/org.vitrum.decoracion.so.nuevo && mv -f $d/org.vitrum.decoracion.so.nuevo $d/org.vitrum.decoracion.so; }
-'
-
-# KRunner sin Alt+Espacio también en sus atajos predeterminados (si se pierde la configuración, el de
-# Spotlight no debe chocar con él)
-sudo -n -u vitrum -H bash -c '
-mkdir -p ~/.local/share/kglobalaccel
-sed "s/^X-KDE-Shortcuts=Alt+Space,Alt+F2,Search$/X-KDE-Shortcuts=Alt+F2,Search/" /usr/share/kglobalaccel/org.kde.krunner.desktop > ~/.local/share/kglobalaccel/org.kde.krunner.desktop
-'
-
-# Desenfoque de Vitrum (KWin con esquinas suavizadas en el Dock, Centro de Control y Spotlight)
-tar -C ~/vitrum-kde -cf - kwin-desenfoque | sudo -n -u vitrum tar -C /home/vitrum/.cache/vitrum-src -xf -
-sudo -n -u vitrum -H bash -c '
+# 11. Desenfoque de Vitrum (KWin)
+sincronizar_src "kwin-desenfoque"
+ejecutar_en_destino '
 cp ~/.cache/vitrum-src/scripts/vitrum-desenfoque-construir ~/.local/bin/
 mkdir -p ~/.config/plasma-workspace/env ~/.local/share/vitrum ~/.local/lib64/qt6/plugins/kwin/effects/plugins
 cp ~/.cache/vitrum-src/integracion/vitrum-desenfoque-guardian.sh ~/.config/plasma-workspace/env/
-# efecto ya compilado (kd-out, de esta misma versión de kwin-devel): instalación atómica
-f=~/.cache/vitrum-src/kd-out/vitrumblur.so; d=~/.local/lib64/qt6/plugins/kwin/effects/plugins
-if [ -f $f ] && [ -f ~/.cache/vitrum-src/kd-out/version ]; then
-    cmp -s $f $d/vitrumblur.so || { cp $f $d/vitrumblur.so.nuevo && mv -f $d/vitrumblur.so.nuevo $d/vitrumblur.so; }
+
+f=~/.cache/vitrum-src/kd-out/vitrumblur.so
+d=~/.local/lib64/qt6/plugins/kwin/effects/plugins
+if [ -f "$f" ] && [ -f ~/.cache/vitrum-src/kd-out/version ]; then
+    cmp -s "$f" "$d/vitrumblur.so" || { cp "$f" "$d/vitrumblur.so.nuevo" && mv -f "$d/vitrumblur.so.nuevo" "$d/vitrumblur.so"; }
     cp ~/.cache/vitrum-src/kd-out/version ~/.local/share/vitrum/desenfoque-kwin
 fi
-# tras una actualización de KWin, lo recompila en segundo plano después de iniciar sesión
+
 cat > ~/.config/systemd/user/vitrum-desenfoque.service <<EOT
 [Unit]
 Description=Vitrum: recompila el desenfoque propio si KWin se ha actualizado
@@ -169,3 +253,5 @@ WantedBy=plasma-workspace.target
 EOT
 ln -sf ../vitrum-desenfoque.service ~/.config/systemd/user/plasma-workspace.target.wants/vitrum-desenfoque.service
 '
+
+echo "==> Despliegue completado con éxito en $TARGET_HOME."

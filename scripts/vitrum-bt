@@ -1,0 +1,204 @@
+#!/usr/bin/env python3
+"""Vitrum: Bluetooth para Ajustes y el Centro de Control, por D-Bus con BlueZ (sin la herramienta interactiva).
+
+  vitrum-bt list                 dispositivos conocidos:  mac|nombre|emparejado|conectado|icono|rssi
+  vitrum-bt scan [segundos]      busca dispositivos cercanos durante unos segundos y luego los lista
+  vitrum-bt pair <mac>           empareja, marca de confianza y conecta (como «Conectar» en macOS)
+  vitrum-bt connect|disconnect|remove <mac>
+  vitrum-bt power on|off
+
+Para emparejar registra su propio agente: acepta los dispositivos que no piden código (auriculares, ratones,
+altavoces) y la confirmación numérica; los que piden escribir un PIN (teclados antiguos) dan error.
+"""
+import sys
+
+import dbus
+import dbus.mainloop.glib
+import dbus.service
+from gi.repository import GLib
+
+BUS = "org.bluez"
+AGENT_PATH = "/org/vitrum/btagent"
+
+
+def bus():
+    return dbus.SystemBus()
+
+
+def objects():
+    om = dbus.Interface(bus().get_object(BUS, "/"), "org.freedesktop.DBus.ObjectManager")
+    return om.GetManagedObjects()
+
+
+def adapter_path():
+    for path, ifaces in objects().items():
+        if "org.bluez.Adapter1" in ifaces:
+            return path
+    return None
+
+
+def device_path(mac):
+    for path, ifaces in objects().items():
+        d = ifaces.get("org.bluez.Device1")
+        if d and str(d.get("Address", "")).upper() == mac.upper():
+            return path
+    return None
+
+
+def props(path):
+    return dbus.Interface(bus().get_object(BUS, path), "org.freedesktop.DBus.Properties")
+
+
+def listar():
+    for path, ifaces in objects().items():
+        d = ifaces.get("org.bluez.Device1")
+        if not d:
+            continue
+        name = str(d.get("Alias") or d.get("Name") or d.get("Address")).replace("|", " ")
+        # sin nombre real (solo la dirección): son señales sueltas, no se muestran como «cercanos»
+        if not d.get("Name") and not bool(d.get("Paired", False)):
+            continue
+        print("%s|%s|%d|%d|%s|%s" % (
+            d.get("Address"), name, int(bool(d.get("Paired", False))), int(bool(d.get("Connected", False))),
+            d.get("Icon", "bluetooth"), d.get("RSSI", "")))
+
+
+class Agente(dbus.service.Object):
+    @dbus.service.method("org.bluez.Agent1", in_signature="", out_signature="")
+    def Release(self):
+        pass
+
+    @dbus.service.method("org.bluez.Agent1", in_signature="os", out_signature="")
+    def AuthorizeService(self, device, uuid):
+        return
+
+    @dbus.service.method("org.bluez.Agent1", in_signature="o", out_signature="s")
+    def RequestPinCode(self, device):
+        raise dbus.exceptions.DBusException("org.bluez.Error.Rejected", "requiere PIN")
+
+    @dbus.service.method("org.bluez.Agent1", in_signature="o", out_signature="u")
+    def RequestPasskey(self, device):
+        raise dbus.exceptions.DBusException("org.bluez.Error.Rejected", "requiere clave")
+
+    @dbus.service.method("org.bluez.Agent1", in_signature="ouq", out_signature="")
+    def DisplayPasskey(self, device, passkey, entered):
+        pass
+
+    @dbus.service.method("org.bluez.Agent1", in_signature="os", out_signature="")
+    def DisplayPinCode(self, device, pincode):
+        pass
+
+    @dbus.service.method("org.bluez.Agent1", in_signature="ou", out_signature="")
+    def RequestConfirmation(self, device, passkey):
+        return  # confirmación numérica: se acepta
+
+    @dbus.service.method("org.bluez.Agent1", in_signature="o", out_signature="")
+    def RequestAuthorization(self, device):
+        return
+
+    @dbus.service.method("org.bluez.Agent1", in_signature="", out_signature="")
+    def Cancel(self):
+        pass
+
+
+def emparejar(mac):
+    dbus.mainloop.glib.DBusGMainLoop(set_as_default=True)
+    b = dbus.SystemBus()
+    Agente(b, AGENT_PATH)
+    mgr = dbus.Interface(b.get_object(BUS, "/org/bluez"), "org.bluez.AgentManager1")
+    mgr.RegisterAgent(AGENT_PATH, "KeyboardDisplay")
+    path = device_path(mac)
+    if not path:
+        print("error|no encontrado: vuelve a buscar")
+        return 1
+    dev = dbus.Interface(b.get_object(BUS, path), "org.bluez.Device1")
+    loop = GLib.MainLoop()
+    res = {"err": None}
+
+    def ok():
+        loop.quit()
+
+    def fail(e):
+        res["err"] = e
+        loop.quit()
+
+    already = bool(props(path).Get("org.bluez.Device1", "Paired"))
+    if not already:
+        dev.Pair(reply_handler=ok, error_handler=fail, timeout=60)
+        GLib.timeout_add_seconds(65, loop.quit)
+        loop.run()
+    try:
+        mgr.UnregisterAgent(AGENT_PATH)
+    except Exception:
+        pass
+    if res["err"] is not None and "AlreadyExists" not in str(res["err"]):
+        print("error|%s" % res["err"].get_dbus_message() if hasattr(res["err"], "get_dbus_message") else res["err"])
+        return 1
+    props(path).Set("org.bluez.Device1", "Trusted", dbus.Boolean(True))
+    try:
+        dev.Connect(timeout=30)
+    except dbus.exceptions.DBusException as e:
+        print("error|emparejado, pero no se pudo conectar: %s" % e.get_dbus_message())
+        return 1
+    print("ok")
+    return 0
+
+
+def buscar(segundos):
+    dbus.mainloop.glib.DBusGMainLoop(set_as_default=True)
+    path = adapter_path()
+    if not path:
+        return 1
+    ad = dbus.Interface(dbus.SystemBus().get_object(BUS, path), "org.bluez.Adapter1")
+    try:
+        ad.SetDiscoveryFilter({"Transport": "auto"})
+        ad.StartDiscovery()
+    except dbus.exceptions.DBusException:
+        pass  # ya buscando (otra app): basta con esperar
+    loop = GLib.MainLoop()
+    GLib.timeout_add_seconds(segundos, loop.quit)
+    loop.run()
+    try:
+        ad.StopDiscovery()
+    except dbus.exceptions.DBusException:
+        pass
+    listar()
+    return 0
+
+
+def main(a):
+    if not a or a[0] == "list":
+        listar()
+        return 0
+    cmd = a[0]
+    if cmd == "scan":
+        return buscar(int(a[1]) if len(a) > 1 else 8)
+    if cmd == "power":
+        path = adapter_path()
+        if path:
+            props(path).Set("org.bluez.Adapter1", "Powered", dbus.Boolean(a[1] == "on"))
+        return 0
+    if len(a) < 2:
+        return 2
+    if cmd == "pair":
+        return emparejar(a[1])
+    path = device_path(a[1])
+    if not path:
+        print("error|no encontrado")
+        return 1
+    try:
+        if cmd == "connect":
+            dbus.Interface(bus().get_object(BUS, path), "org.bluez.Device1").Connect(timeout=30)
+        elif cmd == "disconnect":
+            dbus.Interface(bus().get_object(BUS, path), "org.bluez.Device1").Disconnect()
+        elif cmd == "remove":
+            dbus.Interface(bus().get_object(BUS, adapter_path()), "org.bluez.Adapter1").RemoveDevice(path)
+    except dbus.exceptions.DBusException as e:
+        print("error|%s" % e.get_dbus_message())
+        return 1
+    print("ok")
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv[1:]))

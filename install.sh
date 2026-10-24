@@ -158,7 +158,7 @@ cp -r "$REPO_DIR/ajustes/qml" "$HOME/.local/share/vitrum-ajustes/"
 
 for s in vitrum-modo vitrum-plasma-set vitrum-disposicion vitrum-esquemas vitrum-klassy \
          vitrum-bandeja vitrum-brillo vitrum-raton vitrum-pantalla-cambio \
-         vitrum-cc-estado vitrum-cc-detalle vitrum-vista-rapida vitrum-desenfoque-construir vitrum-zen vitrum-steam vitrum-waywallen; do
+         vitrum-cc-estado vitrum-cc-detalle vitrum-bt vitrum-vista-rapida vitrum-desenfoque-construir vitrum-zen vitrum-steam vitrum-waywallen; do
     cp "$REPO_DIR/scripts/$s" "$HOME/.local/bin/$s"
     chmod +x "$HOME/.local/bin/$s"
 done

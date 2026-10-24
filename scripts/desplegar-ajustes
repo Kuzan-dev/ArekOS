@@ -130,7 +130,7 @@ ejecutar_en_destino '
 mkdir -p ~/.local/share/plasma/plasmoids
 rm -rf ~/.local/share/plasma/plasmoids/org.vitrum.centrocontrol
 cp -r ~/.cache/vitrum-src/centro-control ~/.local/share/plasma/plasmoids/org.vitrum.centrocontrol
-cp ~/.cache/vitrum-src/scripts/vitrum-cc-estado ~/.cache/vitrum-src/scripts/vitrum-cc-detalle ~/.local/bin/
+cp ~/.cache/vitrum-src/scripts/vitrum-cc-estado ~/.cache/vitrum-src/scripts/vitrum-cc-detalle ~/.cache/vitrum-src/scripts/vitrum-bt ~/.local/bin/
 '
 
 # 4. Menú del sistema (logo)

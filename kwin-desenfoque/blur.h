@@ -7,6 +7,8 @@
 
 #pragma once
 
+#include <QVector2D>
+
 #include "effect/effect.h"
 #include "opengl/glutils.h"
 #include "scene/item.h"
@@ -50,6 +52,11 @@ struct VitrumBlurEffectData
      * Color transformation matrix (contrast, and saturation).
      */
     std::optional<QMatrix4x4> colorMatrix;
+
+    /**
+     * Vitrum: intensidad del efecto de contraste (en vitrum-shell lleva el tinte del material, ver vitrumTint).
+     */
+    qreal intensity = 1.0;
 };
 
 class VitrumBlurEffect : public KWin::Effect
@@ -106,6 +113,13 @@ private:
         int colorMatrixLocation;
         int offsetLocation;
         int halfpixelLocation;
+        int tfTypeLocation;
+        int tfLumLocation;
+        int toSrgbLocation;
+        int fromSrgbLocation;
+        int tintLocation;
+        int edgeLightLocation;
+        int blackLiftLocation;
     } m_onscreenPass;
 
     struct
@@ -118,6 +132,13 @@ private:
         int boxLocation;
         int cornerRadiusLocation;
         int opacityLocation;
+        int tfTypeLocation;
+        int tfLumLocation;
+        int toSrgbLocation;
+        int fromSrgbLocation;
+        int tintLocation;
+        int edgeLightLocation;
+        int blackLiftLocation;
     } m_roundedOnscreenPass;
 
     struct
@@ -126,6 +147,11 @@ private:
         int mvpMatrixLocation;
         int offsetLocation;
         int halfpixelLocation;
+        int tfTypeLocation;
+        int tfLumLocation;
+        int toSrgbLocation;
+        int fromSrgbLocation;
+        int toWorkLocation;
     } m_downsamplePass;
 
     struct
@@ -158,6 +184,7 @@ private:
     int m_offset;
     int m_expandSize;
     int m_noiseStrength;
+    qreal m_hdrBlackLift = 0.03;
 
     struct OffsetStruct
     {

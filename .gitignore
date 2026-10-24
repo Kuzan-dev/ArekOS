@@ -1,0 +1,30 @@
+# Directorios y artefactos de compilación
+build/
+bin/
+*.o
+*.a
+*.so.tmp
+compile_commands.json
+CMakeCache.txt
+CMakeFiles/
+Makefile
+cmake_install.cmake
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+.venv/
+env/
+
+# Editores e IDEs
+.vscode/
+.idea/
+*.kdev4
+*.swp
+*.swo
+*~
+
+# Sistema operativo
+.DS_Store
+Thumbs.db

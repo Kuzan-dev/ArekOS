@@ -88,7 +88,7 @@ Window {
         if (!visible) return
         // todo el ratón llega a la superficie (para cerrar al hacer clic fuera); el desenfoque, solo al panel
         Sys.setInputRegion(cc, 0, 0, width, height)
-        Sys.setBlur(cc, panel.x, panel.y, panel.width, panel.height, panel.radius, Material.contrast, 1.0, Material.saturation)
+        Sys.setBlur(cc, panel.x, panel.y, panel.width, panel.height, panel.radius, Material.contrast, Material.intensity(panel.radius), Material.saturation)
     }
     onWidthChanged: Qt.callLater(updateRegions)
     MouseArea { anchors.fill: parent; onClicked: cc.close2() }

@@ -2,9 +2,17 @@
 #include <QDBusConnection>
 #include <QDBusConnectionInterface>
 #include <QDBusMessage>
+#include <QDBusServiceWatcher>
 #include <QDir>
 #include <QFile>
 #include <QFileInfo>
+#include <QImage>
+#include <QImageIOHandler>
+#include <QImageReader>
+#include <QUrl>
+#include <QMenu>
+#include <QDBusObjectPath>
+#include <QDBusReply>
 #include <QMimeDatabase>
 #include <QApplication>
 #include <algorithm>
@@ -181,6 +189,55 @@ public:
         }
     }
 
+    // Menú nativo (QMenu): lo dibuja el estilo de las apps (Darkly), igual que el menú del escritorio y el de
+    // cualquier app, translúcido y con las mismas esquinas. items: [{text, enabled, checked, separator}, …].
+    // Se ancla al rectángulo (x, y, width, height) de la ventana w (p. ej. un icono del Dock) y se abre hacia
+    // edge ("bottom": encima, centrado; "left"/"right": al lado; "": debajo). Con Wayland se usa el posicionador
+    // de xdg_popup (relativo a la ventana padre): las superficies layer-shell no tienen posición global.
+    // Devuelve el índice elegido o -1.
+    Q_INVOKABLE int nativeMenu(QQuickWindow *w, qreal x, qreal y, qreal width, qreal height, const QVariantList &items,
+                               const QString &edge = {})
+    {
+        QMenu menu;
+        QList<QAction *> actions;
+        for (const QVariant &v : items) {
+            const QVariantMap it = v.toMap();
+            if (it.value(QStringLiteral("separator")).toBool()) {
+                actions << menu.addSeparator();
+                continue;
+            }
+            QAction *a = menu.addAction(it.value(QStringLiteral("text")).toString());
+            a->setEnabled(it.value(QStringLiteral("enabled"), true).toBool());
+            if (it.contains(QStringLiteral("checked"))) {
+                a->setCheckable(true);
+                a->setChecked(it.value(QStringLiteral("checked")).toBool());
+            }
+            actions << a;
+        }
+        const QRect anchor = QRectF(x, y, std::max<qreal>(1, width), std::max<qreal>(1, height)).toRect();
+        Qt::Edges side = Qt::BottomEdge;
+        if (edge == QLatin1String("bottom"))
+            side = Qt::TopEdge;
+        else if (edge == QLatin1String("left"))
+            side = Qt::RightEdge;
+        else if (edge == QLatin1String("right"))
+            side = Qt::LeftEdge;
+        menu.winId(); // crea la ventana nativa para poder fijar su padre y el anclaje
+        if (QWindow *mw = menu.windowHandle()) {
+            if (w)
+                mw->setTransientParent(w);
+            mw->setProperty("_q_waylandPopupAnchorRect", anchor.adjusted(0, edge == QLatin1String("bottom") ? -8 : 0, 0, 0));
+            mw->setProperty("_q_waylandPopupAnchor", QVariant::fromValue(side));
+            mw->setProperty("_q_waylandPopupGravity", QVariant::fromValue(side));
+            // xdg_positioner: deslizar en el eje del borde y voltear en el otro si no cabe
+            const bool vertical = side == Qt::TopEdge || side == Qt::BottomEdge;
+            mw->setProperty("_q_waylandPopupConstraintAdjustment", vertical ? (1u | 8u) : (2u | 4u));
+        }
+        const QPoint pos = w ? w->mapToGlobal(anchor.topLeft()) : anchor.topLeft();
+        QAction *chosen = menu.exec(pos);
+        return chosen ? int(actions.indexOf(chosen)) : -1;
+    }
+
     Q_INVOKABLE void clearBlur(QQuickWindow *w)
     {
         if (w)
@@ -197,6 +254,16 @@ public:
     }
 
     // módulo de KDE que se puede mostrar dentro de Ajustes (QML) o que necesita su propia ventana (QWidget)
+    // ¿está cargado este efecto de KWin? (el material lo aplica el desenfoque de Vitrum solo si lo está)
+    Q_INVOKABLE bool effectLoaded(const QString &name) const
+    {
+        QDBusMessage m = QDBusMessage::createMethodCall(QStringLiteral("org.kde.KWin"), QStringLiteral("/Effects"),
+                                                        QStringLiteral("org.kde.kwin.Effects"), QStringLiteral("isEffectLoaded"));
+        m << name;
+        const QDBusMessage r = QDBusConnection::sessionBus().call(m, QDBus::Block, 500);
+        return r.type() == QDBusMessage::ReplyMessage && !r.arguments().isEmpty() && r.arguments().constFirst().toBool();
+    }
+
     Q_INVOKABLE bool kcmEmbeddable(const QString &id) const { return KcmView::isEmbeddable(id); }
 
     Q_INVOKABLE bool trashFull() const
@@ -236,10 +303,71 @@ public:
         w->update(); // KWin aplica la región en el siguiente fotograma: forzarlo
     }
 
+    // Foto de la cuenta: recorte cuadrado centrado a 512 px en ~/.face.icon y registrada en AccountsService (de
+    // ahí la leen la pantalla de bloqueo y la de inicio de sesión). Cambiar la propia foto no pide contraseña.
+    Q_PROPERTY(int faceRevision READ faceRevision NOTIFY faceChanged)
+    int faceRevision() const { return m_faceRevision; }
+    // tamaño real de una imagen (el editor de recorte trabaja sobre una vista reducida)
+    Q_INVOKABLE QSize imageSize(const QString &source) const
+    {
+        QImageReader r(source.startsWith(QLatin1String("file://")) ? QUrl(source).toLocalFile() : source);
+        QSize sz = r.size();
+        if (r.transformation() & QImageIOHandler::TransformationRotate90)
+            sz.transpose();   // foto girada por EXIF: se muestra con los lados cambiados
+        return sz;
+    }
+    // (cropX, cropY, cropSide): cuadrado a recortar en píxeles de la imagen original (el editor de recorte de
+    // Ajustes); sin él, el cuadrado centrado más grande
+    Q_INVOKABLE bool setUserPicture(const QString &source, qreal cropX = -1, qreal cropY = -1, qreal cropSide = -1)
+    {
+        QString path = source;
+        if (path.startsWith(QLatin1String("file://")))
+            path = QUrl(path).toLocalFile();
+        QImageReader reader(path);
+        reader.setAutoTransform(true);   // fotos del móvil: orientación EXIF
+        QImage img = reader.read();
+        if (img.isNull())
+            return false;
+        QRect crop;
+        if (cropSide > 0)
+            crop = QRectF(cropX, cropY, cropSide, cropSide).toRect().intersected(img.rect());
+        if (crop.width() < 8 || crop.height() < 8) {
+            const int side = std::min(img.width(), img.height());
+            crop = QRect((img.width() - side) / 2, (img.height() - side) / 2, side, side);
+        }
+        img = img.copy(crop).scaled(512, 512, Qt::IgnoreAspectRatio, Qt::SmoothTransformation);
+        const QString face = QDir::homePath() + QStringLiteral("/.face.icon");
+        if (!img.save(face, "PNG"))
+            return false;
+        QDBusMessage find = QDBusMessage::createMethodCall(QStringLiteral("org.freedesktop.Accounts"), QStringLiteral("/org/freedesktop/Accounts"),
+                                                           QStringLiteral("org.freedesktop.Accounts"), QStringLiteral("FindUserByName"));
+        find << qEnvironmentVariable("USER");
+        const QDBusReply<QDBusObjectPath> user = QDBusConnection::systemBus().call(find, QDBus::Block, 3000);
+        if (user.isValid()) {
+            QDBusMessage set = QDBusMessage::createMethodCall(QStringLiteral("org.freedesktop.Accounts"), user.value().path(),
+                                                              QStringLiteral("org.freedesktop.Accounts.User"), QStringLiteral("SetIconFile"));
+            set << face;
+            QDBusConnection::systemBus().call(set, QDBus::Block, 5000);
+        }
+        ++m_faceRevision;
+        Q_EMIT faceChanged();
+        return true;
+    }
+
+    // avisa (serviceRegistered) cada vez que aparece ese nombre en el bus de sesión (p. ej. org.kde.spectacle)
+    Q_INVOKABLE void watchService(const QString &name)
+    {
+        auto *w = new QDBusServiceWatcher(name, QDBusConnection::sessionBus(), QDBusServiceWatcher::WatchForRegistration, this);
+        connect(w, &QDBusServiceWatcher::serviceRegistered, this, &Sys::serviceRegistered);
+    }
+
 Q_SIGNALS:
     void finished(const QString &tag, int code, const QString &out, const QString &err);
+    void serviceRegistered(const QString &name);
+    void faceChanged();
 
 private:
+    int m_faceRevision = 0;
     static KConfigGroup group(KConfig &cfg, const QStringList &groups)
     {
         KConfigGroup g = cfg.group(groups.value(0));

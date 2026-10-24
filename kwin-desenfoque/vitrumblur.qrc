@@ -15,4 +15,7 @@
   <file>shaders/vertex.vert</file>
   <file>shaders/vertex_core.vert</file>
 </qresource>
+<qresource prefix="/opengl/">
+  <file alias="vitrumcolor.glsl">shaders/vitrumcolor.glsl</file>
+</qresource>
 </RCC>

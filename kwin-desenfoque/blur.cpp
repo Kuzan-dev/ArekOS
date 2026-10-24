@@ -11,6 +11,7 @@
 #include "blurconfig.h"
 
 #include "core/pixelgrid.h"
+#include "core/colorspace.h"
 #include "core/rendertarget.h"
 #include "core/renderviewport.h"
 #include "effect/effecthandler.h"
@@ -77,6 +78,31 @@ static qreal vitrumCornerRadius(const EffectWindow *w)
     return at < 0 ? 0 : caption.mid(at + 2).toDouble();
 }
 
+// Vitrum: las superficies de vitrum-shell (app vitrum-ajustes) llevan su material en la intensidad del efecto de
+// contraste, que KWin no usa: intensidad = 10 × radio de esquina + tinte. El tinte (< 1 → capa negra de alfa
+// 1 - tinte; > 1 → capa blanca de alfa tinte - 1) se aplica así en el mismo espacio de color que la saturación y el
+// contraste, y no lo mezcla KWin en lineal (en HDR se veía grisáceo). Con él, el efecto pinta también el filo
+// interior de 1 px (blanco al 17 %, medido en macOS), que en lineal se veía como una línea blanca brillante.
+// El radio va aquí porque el dock y los paneles son superficies layer-shell, sin título donde indicarlo.
+static void vitrumTint(const EffectWindow *w, qreal intensity, qreal &radius, QVector2D &tint, float &edgeLight)
+{
+    radius = 0;
+    tint = QVector2D(1.0f, 0.0f);
+    edgeLight = 0.0f;
+    if (intensity < 10.0 || w->window()->resourceClass() != QLatin1String("vitrum-ajustes")) {
+        return;
+    }
+    radius = std::floor(intensity / 10.0);
+    const qreal t = intensity - radius * 10.0;
+    if (t < 1.0) {
+        tint = QVector2D(std::max(0.0, t), 0.0f);
+    } else {
+        const float a = std::min(1.0, t - 1.0);
+        tint = QVector2D(1.0f - a, a);
+    }
+    edgeLight = 0.17f;
+}
+
 static QMatrix4x4 colorTransformMatrix(qreal saturation, qreal contrast)
 {
     QMatrix4x4 saturationMatrix;
@@ -121,6 +147,13 @@ VitrumBlurEffect::VitrumBlurEffect()
         m_onscreenPass.colorMatrixLocation = m_onscreenPass.shader->uniformLocation("colorMatrix");
         m_onscreenPass.offsetLocation = m_onscreenPass.shader->uniformLocation("offset");
         m_onscreenPass.halfpixelLocation = m_onscreenPass.shader->uniformLocation("halfpixel");
+        m_onscreenPass.tfTypeLocation = m_onscreenPass.shader->uniformLocation("tfType");
+        m_onscreenPass.tfLumLocation = m_onscreenPass.shader->uniformLocation("tfLum");
+        m_onscreenPass.toSrgbLocation = m_onscreenPass.shader->uniformLocation("toSrgb");
+        m_onscreenPass.fromSrgbLocation = m_onscreenPass.shader->uniformLocation("fromSrgb");
+        m_onscreenPass.tintLocation = m_onscreenPass.shader->uniformLocation("tint");
+        m_onscreenPass.edgeLightLocation = m_onscreenPass.shader->uniformLocation("edgeLight");
+        m_onscreenPass.blackLiftLocation = m_onscreenPass.shader->uniformLocation("blackLift");
     }
 
     m_roundedOnscreenPass.shader = ShaderManager::instance()->generateShaderFromFile(ShaderTrait::MapTexture,
@@ -134,6 +167,13 @@ VitrumBlurEffect::VitrumBlurEffect()
         m_roundedOnscreenPass.colorMatrixLocation = m_roundedOnscreenPass.shader->uniformLocation("colorMatrix");
         m_roundedOnscreenPass.offsetLocation = m_roundedOnscreenPass.shader->uniformLocation("offset");
         m_roundedOnscreenPass.halfpixelLocation = m_roundedOnscreenPass.shader->uniformLocation("halfpixel");
+        m_roundedOnscreenPass.tfTypeLocation = m_roundedOnscreenPass.shader->uniformLocation("tfType");
+        m_roundedOnscreenPass.tfLumLocation = m_roundedOnscreenPass.shader->uniformLocation("tfLum");
+        m_roundedOnscreenPass.toSrgbLocation = m_roundedOnscreenPass.shader->uniformLocation("toSrgb");
+        m_roundedOnscreenPass.fromSrgbLocation = m_roundedOnscreenPass.shader->uniformLocation("fromSrgb");
+        m_roundedOnscreenPass.tintLocation = m_roundedOnscreenPass.shader->uniformLocation("tint");
+        m_roundedOnscreenPass.edgeLightLocation = m_roundedOnscreenPass.shader->uniformLocation("edgeLight");
+        m_roundedOnscreenPass.blackLiftLocation = m_roundedOnscreenPass.shader->uniformLocation("blackLift");
         m_roundedOnscreenPass.boxLocation = m_roundedOnscreenPass.shader->uniformLocation("box");
         m_roundedOnscreenPass.cornerRadiusLocation = m_roundedOnscreenPass.shader->uniformLocation("cornerRadius");
         m_roundedOnscreenPass.opacityLocation = m_roundedOnscreenPass.shader->uniformLocation("opacity");
@@ -149,6 +189,11 @@ VitrumBlurEffect::VitrumBlurEffect()
         m_downsamplePass.mvpMatrixLocation = m_downsamplePass.shader->uniformLocation("modelViewProjectionMatrix");
         m_downsamplePass.offsetLocation = m_downsamplePass.shader->uniformLocation("offset");
         m_downsamplePass.halfpixelLocation = m_downsamplePass.shader->uniformLocation("halfpixel");
+        m_downsamplePass.tfTypeLocation = m_downsamplePass.shader->uniformLocation("tfType");
+        m_downsamplePass.tfLumLocation = m_downsamplePass.shader->uniformLocation("tfLum");
+        m_downsamplePass.toSrgbLocation = m_downsamplePass.shader->uniformLocation("toSrgb");
+        m_downsamplePass.fromSrgbLocation = m_downsamplePass.shader->uniformLocation("fromSrgb");
+        m_downsamplePass.toWorkLocation = m_downsamplePass.shader->uniformLocation("toWork");
     }
 
     m_upsamplePass.shader = ShaderManager::instance()->generateShaderFromFile(ShaderTrait::MapTexture,
@@ -307,6 +352,7 @@ void VitrumBlurEffect::reconfigure(ReconfigureFlags flags)
     m_offset = blurStrengthValues[blurStrength].offset;
     m_expandSize = blurOffsets[m_iterationCount - 1].expandSize;
     m_noiseStrength = VitrumBlurConfig::noiseStrength();
+    m_hdrBlackLift = std::clamp(KSharedConfig::openConfig(QStringLiteral("kwinrc"))->group(QStringLiteral("Effect-vitrumblur")).readEntry("HdrBlackLift", 0.03), 0.0, 0.3);
     m_colorMatrix = colorTransformMatrix(VitrumBlurConfig::saturation() / 100.0, 1.0);
     for (auto &[window, data] : m_windows) {
         data.blurItem->setPixelsToExpandRepaintsBelowOpaqueRegions(m_expandSize);
@@ -322,6 +368,7 @@ void VitrumBlurEffect::updateBlurRegion(EffectWindow *w)
     std::optional<Region> frame;
     std::optional<qreal> saturation;
     std::optional<qreal> contrast;
+    qreal intensity = 1.0;
 
 #if KWIN_BUILD_X11
     if (net_wm_blur_region != XCB_ATOM_NONE) {
@@ -350,6 +397,7 @@ void VitrumBlurEffect::updateBlurRegion(EffectWindow *w)
         if (surface->contrast()) {
             saturation = surface->contrast()->saturation();
             contrast = surface->contrast()->contrast();
+            intensity = surface->contrast()->intensity();
         }
     }
 
@@ -368,6 +416,7 @@ void VitrumBlurEffect::updateBlurRegion(EffectWindow *w)
         VitrumBlurEffectData &data = m_windows[w];
         data.content = content;
         data.frame = frame;
+        data.intensity = intensity;
         if (saturation || contrast) {
             data.colorMatrix = colorTransformMatrix(saturation.value_or(1.0), contrast.value_or(1.0));
         } else {
@@ -824,6 +873,16 @@ void VitrumBlurEffect::blur(const RenderTarget &renderTarget, const RenderViewpo
 
         m_downsamplePass.shader->setUniform(m_downsamplePass.mvpMatrixLocation, projectionMatrix);
         m_downsamplePass.shader->setUniform(m_downsamplePass.offsetLocation, float(m_offset));
+        {
+            // Vitrum: la primera pasada pasa el fondo al espacio de trabajo (ver shaders/vitrumcolor.glsl)
+            const auto &cd = renderTarget.colorDescription();
+            const TransferFunction tf = cd->transferFunction();
+            m_downsamplePass.shader->setUniform(m_downsamplePass.tfTypeLocation, int(tf.type));
+            m_downsamplePass.shader->setUniform(m_downsamplePass.tfLumLocation, QVector3D(tf.minLuminance, tf.maxLuminance, cd->referenceLuminance()));
+            const QMatrix4x4 toSrgb = Colorimetry::BT709.fromXYZ() * cd->containerColorimetry().toXYZ();
+            m_downsamplePass.shader->setUniform(m_downsamplePass.toSrgbLocation, toSrgb);
+            m_downsamplePass.shader->setUniform(m_downsamplePass.fromSrgbLocation, toSrgb.inverted());
+        }
 
         for (size_t i = 1; i < renderInfo.framebuffers.size(); ++i) {
             const auto &read = renderInfo.framebuffers[i - 1];
@@ -832,6 +891,7 @@ void VitrumBlurEffect::blur(const RenderTarget &renderTarget, const RenderViewpo
             const QVector2D halfpixel(0.5 / read->colorAttachment()->width(),
                                       0.5 / read->colorAttachment()->height());
             m_downsamplePass.shader->setUniform(m_downsamplePass.halfpixelLocation, halfpixel);
+            m_downsamplePass.shader->setUniform(m_downsamplePass.toWorkLocation, i == 1 ? 1.0f : 0.0f);
 
             read->colorAttachment()->bind();
 
@@ -871,7 +931,20 @@ void VitrumBlurEffect::blur(const RenderTarget &renderTarget, const RenderViewpo
     const QMatrix4x4 &colorMatrix = blurInfo.colorMatrix ? *blurInfo.colorMatrix : m_colorMatrix;
     const float modulation = opacity * opacity;
 
-    const qreal vitrumRadius = vitrumCornerRadius(w);
+    // Vitrum: codificación de la salida, para aplicar el material en gamma 2,2 relativa al blanco de referencia
+    const auto &cd = renderTarget.colorDescription();
+    const TransferFunction tf = cd->transferFunction();
+    const QVector3D tfLum(tf.minLuminance, tf.maxLuminance, cd->referenceLuminance());
+    const QMatrix4x4 toSrgb = Colorimetry::BT709.fromXYZ() * cd->containerColorimetry().toXYZ();
+    qreal materialRadius;
+    QVector2D tint;
+    float edgeLight;
+    vitrumTint(w, blurInfo.intensity, materialRadius, tint, edgeLight);
+    // salida HDR: hay margen por encima del blanco de referencia (o es PQ)
+    const bool hdrOutput = tf.type == TransferFunction::PerceptualQuantizer || cd->referenceLuminance() < tf.maxLuminance * 0.95;
+    const float blackLift = (materialRadius > 0 && hdrOutput) ? float(m_hdrBlackLift) : 0.0f;
+
+    const qreal vitrumRadius = std::max(vitrumCornerRadius(w), materialRadius);
     if (const BorderRadius cornerRadius = vitrumRadius > 0 ? BorderRadius(vitrumRadius) : w->window()->borderRadius(); !cornerRadius.isNull()) {
         ShaderManager::instance()->pushShader(m_roundedOnscreenPass.shader.get());
 
@@ -901,6 +974,13 @@ void VitrumBlurEffect::blur(const RenderTarget &renderTarget, const RenderViewpo
 
         m_roundedOnscreenPass.shader->setUniform(m_roundedOnscreenPass.mvpMatrixLocation, projectionMatrix);
         m_roundedOnscreenPass.shader->setUniform(m_roundedOnscreenPass.colorMatrixLocation, colorMatrix);
+        m_roundedOnscreenPass.shader->setUniform(m_roundedOnscreenPass.tfTypeLocation, int(tf.type));
+        m_roundedOnscreenPass.shader->setUniform(m_roundedOnscreenPass.tfLumLocation, tfLum);
+        m_roundedOnscreenPass.shader->setUniform(m_roundedOnscreenPass.toSrgbLocation, toSrgb);
+        m_roundedOnscreenPass.shader->setUniform(m_roundedOnscreenPass.fromSrgbLocation, toSrgb.inverted());
+        m_roundedOnscreenPass.shader->setUniform(m_roundedOnscreenPass.tintLocation, tint);
+        m_roundedOnscreenPass.shader->setUniform(m_roundedOnscreenPass.edgeLightLocation, edgeLight);
+        m_roundedOnscreenPass.shader->setUniform(m_roundedOnscreenPass.blackLiftLocation, blackLift);
         m_roundedOnscreenPass.shader->setUniform(m_roundedOnscreenPass.halfpixelLocation, halfpixel);
         m_roundedOnscreenPass.shader->setUniform(m_roundedOnscreenPass.offsetLocation, float(m_offset));
         m_roundedOnscreenPass.shader->setUniform(m_roundedOnscreenPass.boxLocation, QVector4D(nativeBox.x() + nativeBox.width() * 0.5, nativeBox.y() + nativeBox.height() * 0.5, nativeBox.width() * 0.5, nativeBox.height() * 0.5));
@@ -931,6 +1011,13 @@ void VitrumBlurEffect::blur(const RenderTarget &renderTarget, const RenderViewpo
 
         m_onscreenPass.shader->setUniform(m_onscreenPass.mvpMatrixLocation, projectionMatrix);
         m_onscreenPass.shader->setUniform(m_onscreenPass.colorMatrixLocation, colorMatrix);
+        m_onscreenPass.shader->setUniform(m_onscreenPass.tfTypeLocation, int(tf.type));
+        m_onscreenPass.shader->setUniform(m_onscreenPass.tfLumLocation, tfLum);
+        m_onscreenPass.shader->setUniform(m_onscreenPass.toSrgbLocation, toSrgb);
+        m_onscreenPass.shader->setUniform(m_onscreenPass.fromSrgbLocation, toSrgb.inverted());
+        m_onscreenPass.shader->setUniform(m_onscreenPass.tintLocation, tint);
+        m_onscreenPass.shader->setUniform(m_onscreenPass.edgeLightLocation, edgeLight);
+        m_onscreenPass.shader->setUniform(m_onscreenPass.blackLiftLocation, blackLift);
         m_onscreenPass.shader->setUniform(m_onscreenPass.halfpixelLocation, halfpixel);
         m_onscreenPass.shader->setUniform(m_onscreenPass.offsetLocation, float(m_offset));
 

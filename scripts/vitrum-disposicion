@@ -2,7 +2,7 @@
 """Disposición estilo macOS con atajos Linux/Windows + Super para lo nuevo.
 Ejecutar con plasmashell detenido (si no, Plasma sobrescribe la configuración al salir).
 
-Barra de menús: [menú del sistema] [nombre app] [menú global] [espaciador] [bandeja] [lupa] [Centro de Control] [reloj]
+Barra de menús: [menú del sistema] [menú global] [espaciador] [bandeja] [lupa] [Centro de Control] [reloj]
 Dock:           [Launchpad] [apps] (dibujado por vitrum-shell)
 Atajos nuevos (Ctrl+C/V, Alt+Tab, etc. no se tocan):
   Super            → Launchpad          Super+Espacio / Alt+Espacio / Super+S → Spotlight
@@ -115,11 +115,9 @@ if not find(rc, "org.vitrum.menuapple", top):
     rc = set_key(rc, f"[Containments][{top}][Applets][{la}]", "plugin", "org.vitrum.menuapple")
     rc = set_key(rc, f"[Containments][{top}][Applets][{la}]", "immutability", "1")
 
-# 1b) Nombre de la app activa
-if not find(rc, "org.vitrum.nombreapp", top):
-    na = str(next_id(rc))
-    rc = set_key(rc, f"[Containments][{top}][Applets][{na}]", "plugin", "org.vitrum.nombreapp")
-    rc = set_key(rc, f"[Containments][{top}][Applets][{na}]", "immutability", "1")
+# 1b) Sin nombre de la app activa junto al logo (preferencia del usuario: barra más limpia)
+for c, a in find(rc, "org.vitrum.nombreapp", top):
+    rc = del_applet(rc, c, a)
 
 # 1c) Menú global (appmenu) y espaciador (panelspacer)
 if not find(rc, "org.kde.plasma.appmenu", top):

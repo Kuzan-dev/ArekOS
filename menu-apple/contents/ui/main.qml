@@ -5,6 +5,7 @@ import org.kde.plasma.core as PlasmaCore
 import org.kde.plasma.extras as PlasmaExtras
 import org.kde.plasma.plasma5support as P5Support
 import org.kde.kirigami as Kirigami
+import org.kde.plasma.private.sessions as Sessions
 
 // Menú del logo (equivalente al menú Apple de macOS Monterey) con el logo de Fedora.
 // Es un menú nativo: se ve igual que el resto de menús del sistema.
@@ -29,6 +30,9 @@ PlasmoidItem {
         function run(cmd) { connectSource("bash -c '" + cmd.replace(/'/g, "'\\''") + "' #" + Date.now()) }
         Component.onCompleted: connectSource("bash -c 'getent passwd $USER' #nombre")
     }
+    // cambio rápido de usuario (bloquea esta sesión y abre la pantalla de inicio de sesión)
+    Sessions.SessionManagement { id: sessions }
+
     function logout(method) {
         sh.run("dbus-send --session --type=method_call --dest=org.kde.LogoutPrompt /LogoutPrompt org.kde.LogoutPrompt." + method)
     }
@@ -76,6 +80,7 @@ PlasmoidItem {
             PlasmaExtras.MenuItem { text: "Apagar equipo…"; onClicked: root.logout("promptShutDown") }
             PlasmaExtras.MenuItem { separator: true }
             PlasmaExtras.MenuItem { text: "Bloquear pantalla\tSuper+L"; onClicked: sh.run("loginctl lock-session") }
+            PlasmaExtras.MenuItem { text: "Cambiar de usuario…"; visible: sessions.canSwitchUser; onClicked: sessions.switchUser() }
             PlasmaExtras.MenuItem { text: "Cerrar sesión de " + root.userName + "…"; onClicked: root.logout("promptLogout") }
         }
     }

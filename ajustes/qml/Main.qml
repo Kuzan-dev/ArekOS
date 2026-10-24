@@ -2,6 +2,7 @@ import QtQuick
 import QtQuick.Layouts
 import QtQuick.Window
 import QtQuick.Controls as QQC
+import Qt5Compat.GraphicalEffects as GE
 
 Window {
     id: win
@@ -172,9 +173,11 @@ Window {
                         x: 14; anchors.verticalCenter: parent.verticalCenter
                         width: 32; height: 32; radius: 16
                         color: Theme.tile.grey
-                        clip: true
-                        Image { anchors.fill: parent; source: Sys.exists(Sys.home() + "/.face.icon") ? "file://" + Sys.home() + "/.face.icon" : ""; fillMode: Image.PreserveAspectCrop }
-                        Txt { anchors.centerIn: parent; text: userName.charAt(0).toUpperCase(); color: "white"; font.pixelSize: 15; font.bold: true; visible: !Sys.exists(Sys.home() + "/.face.icon") }
+                        // foto en círculo, como en macOS (clip recorta por el rectángulo, no por el radio)
+                        Image { id: faceImg; anchors.fill: parent; visible: false; source: Sys.exists(Sys.home() + "/.face.icon") ? "file://" + Sys.home() + "/.face.icon?v=" + Sys.faceRevision : ""; cache: false; fillMode: Image.PreserveAspectCrop; sourceSize.width: 96 }
+                        Rectangle { id: faceMask; anchors.fill: parent; radius: width / 2; visible: false; antialiasing: true }
+                        GE.OpacityMask { anchors.fill: parent; source: faceImg; maskSource: faceMask; visible: faceImg.status === Image.Ready }
+                        Txt { anchors.centerIn: parent; text: userName.charAt(0).toUpperCase(); color: "white"; font.pixelSize: 15; font.bold: true; visible: faceImg.status !== Image.Ready }
                     }
                     Column {
                         anchors.left: avatar.right; anchors.leftMargin: 9; anchors.verticalCenter: parent.verticalCenter

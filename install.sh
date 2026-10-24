@@ -5,6 +5,8 @@
 # Uso directo:
 #   bash ~/Documentos/ArekOS/install.sh            # Instala para tu usuario actual
 #   bash ~/Documentos/ArekOS/install.sh --compilar # Recompila desde código fuente (en Podman o nativo) e instala
+#   bash ~/Documentos/ArekOS/install.sh --login    # Además instala la pantalla de inicio de sesión (pide sudo)
+#   bash ~/Documentos/ArekOS/install.sh --waywallen  # Además pone los fondos animados (Wallpaper Engine) en el escritorio
 #
 # Qué instala (100 % en $HOME, sin tocar archivos del sistema ni requerir root):
 #   - Barra de menús estilo macOS Sequoia (menú del logo, nombre de app activa, menú global,
@@ -18,17 +20,27 @@
 #     translúcidos con texto desactivado al 30 % de alfa como en macOS)
 #   - Esquemas de color Vitrum Claro / Oscuro, iconos y cursores WhiteSur, fuentes Inter y
 #     JetBrains Mono, y app propia de "Ajustes del Sistema" + Vista rápida (Super+Y)
+#   - Pantalla de bloqueo estilo Sequoia (bloqueo/) y, con --login, pantalla de inicio de sesión estilo
+#     Sequoia sobre Plasma Login (login/, en /usr/local, con vuelta automática a la de Fedora si falla)
+#   - Fondos animados de Wallpaper Engine con waywallen (Flatpak + integración con Plasma + complemento de WE)
 # ==============================================================================
 set -euo pipefail
 
 REPO_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 COMPILAR=false
 APLICAR_EN_VIVO=true
+LOGIN=false
+WAYWALLEN=false
+# primera instalación: el fondo de pantalla Vitrum solo se pone entonces (al reinstalar se respeta el del usuario)
+PRIMERA=true
+[ -f "$HOME/.config/vitrumrc" ] && PRIMERA=false
 
 for arg in "$@"; do
     case "$arg" in
         --compilar) COMPILAR=true ;;
         --sin-reiniciar-plasma) APLICAR_EN_VIVO=false ;;
+        --login) LOGIN=true ;;
+        --waywallen) WAYWALLEN=true ;;
     esac
 done
 
@@ -60,7 +72,7 @@ cp -r "$REPO_DIR/ajustes" "$REPO_DIR/centro-control" "$REPO_DIR/decoracion" \
       "$REPO_DIR/iconos" "$REPO_DIR/integracion" "$REPO_DIR/kwin-desenfoque" \
       "$REPO_DIR/menu-apple" "$REPO_DIR/nombre-app" "$REPO_DIR/scripts" \
       "$REPO_DIR/spotlight" "$REPO_DIR/tema-plasma" "$REPO_DIR/temas" \
-      "$REPO_DIR/darkly" "$HOME/.cache/vitrum-src/"
+      "$REPO_DIR/darkly" "$REPO_DIR/bloqueo" "$HOME/.cache/vitrum-src/"
 
 echo "==> [2/7] Descomprimiendo iconos WhiteSur, fuentes Inter/JetBrains Mono, esquemas y temas..."
 zstd -dc "$REPO_DIR/paquetes/recursos.tar.zst" | tar -C "$HOME/.local/share" -xf -
@@ -146,7 +158,7 @@ cp -r "$REPO_DIR/ajustes/qml" "$HOME/.local/share/vitrum-ajustes/"
 
 for s in vitrum-modo vitrum-plasma-set vitrum-disposicion vitrum-esquemas vitrum-klassy \
          vitrum-bandeja vitrum-brillo vitrum-raton vitrum-pantalla-cambio \
-         vitrum-cc-estado vitrum-cc-detalle vitrum-vista-rapida vitrum-desenfoque-construir; do
+         vitrum-cc-estado vitrum-cc-detalle vitrum-vista-rapida vitrum-desenfoque-construir vitrum-zen vitrum-waywallen; do
     cp "$REPO_DIR/scripts/$s" "$HOME/.local/bin/$s"
     chmod +x "$HOME/.local/bin/$s"
 done
@@ -162,6 +174,13 @@ for p_src_dst in "centro-control:org.vitrum.centrocontrol" \
 done
 
 cp "$REPO_DIR/iconos/"*.svg "$HOME/.local/share/icons/hicolor/scalable/apps/"
+# iconos de apps web (Disney+, HBO Max) con la forma y la sombra de WhiteSur
+for t in WhiteSur WhiteSur-dark; do
+    [ -d "$HOME/.local/share/icons/$t/apps/scalable" ] && cp "$REPO_DIR/iconos-apps/"*.svg "$HOME/.local/share/icons/$t/apps/scalable/"
+done
+
+# Pantalla de bloqueo estilo Sequoia (capa propia sobre la de KDE; «bash bloqueo/instalar.sh --quitar» la quita)
+bash "$REPO_DIR/bloqueo/instalar.sh" "$REPO_DIR/bloqueo" >/dev/null
 
 echo "==> [5/7] Configurando servicios systemd, D-Bus, variables de entorno y accesos directos..."
 cp "$REPO_DIR/integracion/vitrum-vista-rapida.desktop" \
@@ -195,6 +214,7 @@ export PATH=$HOME/.local/bin:$HOME/.local/opt/kvantum/bin:$PATH
 EOF
 
 cp "$REPO_DIR/integracion/vitrum-desenfoque-guardian.sh" "$HOME/.config/plasma-workspace/env/"
+cp "$REPO_DIR/integracion/vitrum-atajos-guardian.sh" "$HOME/.config/plasma-workspace/env/"
 
 cat > "$HOME/.config/environment.d/60-vitrum-plugins.conf" <<EOF
 QT_PLUGIN_PATH=$HOME/.local/opt/kvantum/plugins:$HOME/.local/lib64/qt6/plugins
@@ -296,6 +316,8 @@ fi
 # Ejecutar el guardián de desenfoque y la configuración de estilo/decoración
 . "$HOME/.config/plasma-workspace/env/vitrum-desenfoque-guardian.sh"
 "$HOME/.local/bin/vitrum-klassy"
+# Zen Browser (si está instalado): mismas esquinas de 10 px que el resto de ventanas
+"$HOME/.local/bin/vitrum-zen" "$REPO_DIR/integracion" || true
 
 echo "==> [7/7] Aplicando disposición de barra de menús, Dock, atajos y tema..."
 # Respaldo de seguridad de la disposición previa
@@ -314,7 +336,10 @@ if [ "$APLICAR_EN_VIVO" = true ] && systemctl --user -q is-active plasma-plasmas
     "$HOME/.local/bin/vitrum-modo" "$(kreadconfig6 --file vitrumrc --group Apariencia --key Modo --default oscuro)" --aplicar || true
     # Aplicar fondo de pantalla Vitrum (con variantes clara y oscura) en todos los escritorios
     WALL_PATH="$HOME/.local/share/wallpapers/Vitrum"
-    [ -d "$WALL_PATH" ] && plasma-apply-wallpaperimage "$WALL_PATH" >/dev/null 2>&1 || true
+    if [ "$PRIMERA" = true ] && [ -d "$WALL_PATH" ]; then
+        plasma-apply-wallpaperimage "$WALL_PATH" >/dev/null 2>&1 || true
+        bash "$REPO_DIR/bloqueo/instalar.sh" "$REPO_DIR/bloqueo" >/dev/null   # el bloqueo toma el fondo nuevo
+    fi
     systemctl --user enable --now vitrum-shell.service vitrum-modo.timer >/dev/null 2>&1 || true
     systemctl --user restart vitrum-shell.service >/dev/null 2>&1 || true
 else
@@ -323,6 +348,22 @@ else
 fi
 
 kbuildsycoca6 >/dev/null 2>&1 || true
+
+echo "==> Fondos animados (waywallen + Wallpaper Engine)..."
+if [ "$WAYWALLEN" = true ]; then "$HOME/.local/bin/vitrum-waywallen" --aplicar || true
+else "$HOME/.local/bin/vitrum-waywallen" || true; fi
+
+if [ "$LOGIN" = true ]; then
+    echo "==> Pantalla de inicio de sesión (necesita sudo)..."
+    if [ "$(stat -c '%s %Y' /usr/libexec/plasma-login-greeter 2>/dev/null)" != "$(cat "$REPO_DIR/binarios/plasma-login-greeter-huella" 2>/dev/null)" ]; then
+        echo "    Plasma Login del sistema es de otra versión que la compilada: se omite (ver login/construir.sh)."
+    else
+        FONDO="$(grep -m1 '^Image=' "$HOME/.config/plasma-org.kde.plasma.desktop-appletsrc" 2>/dev/null | cut -d= -f2- | sed 's|^file://||')"
+        [ -f "$FONDO" ] || FONDO="$(ls "$HOME/.local/share/wallpapers/Vitrum/contents/images/"* 2>/dev/null | head -1)"
+        sudo bash "$REPO_DIR/login/instalar.sh" "$REPO_DIR/binarios/vitrum-login-greeter" "$FONDO" "$(whoami)"
+        echo "    Si algo fallara: Ctrl+Alt+F3, entra y ejecuta «sudo vitrum-login-restaurar»."
+    fi
+fi
 
 echo ""
 echo "=============================================================================="

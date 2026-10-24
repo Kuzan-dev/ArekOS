@@ -1,3 +1,5 @@
+#include "vitrumcolor.glsl"
+
 uniform sampler2D texUnit;
 uniform mat4 colorMatrix;
 uniform float offset;
@@ -16,5 +18,5 @@ void main(void)
     sum += texture2D(texUnit, uv + vec2(0.0, -halfpixel.y * 2.0) * offset);
     sum += texture2D(texUnit, uv + vec2(-halfpixel.x, -halfpixel.y) * offset) * 2.0;
 
-    gl_FragColor = (sum / 12.0) * colorMatrix;
+    gl_FragColor = vitrumMaterial(sum / 12.0, colorMatrix, 0.0);
 }

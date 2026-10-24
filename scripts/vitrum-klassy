@@ -48,6 +48,25 @@ kwriteconfig6 --file kdeglobals --group KDE --key widgetStyle Darkly
 kwriteconfig6 --file kdeglobals --group KDE --key ShowIconsInMenuItems false
 # Tema global: solo se usa para las pantallas de cierre de sesión (diálogo al estilo macOS)
 kwriteconfig6 --file kdeglobals --group KDE --key LookAndFeelPackage org.vitrum.claro
+# Apps GTK/CSD (Firefox, Zen Browser…): radio de esquina de 10 px como en macOS/Vitrum (Breeze usa 6 px)
+for gdir in ~/.config/gtk-3.0 ~/.config/gtk-4.0; do
+    mkdir -p "$gdir"
+    f="$gdir/gtk.css"
+    [ -f "$f" ] || echo "@import 'colors.css';" > "$f"
+    grep -q "Vitrum: 10px" "$f" 2>/dev/null || cat >> "$f" << 'EOF'
+
+/* Vitrum: 10px rounded corners (macOS Monterey/Sequoia) for GTK & Firefox/Zen CSD */
+decoration, .csd decoration, window.csd decoration, headerbar, .titlebar, window.background.csd {
+  border-radius: 10px 10px 0 0;
+}
+window.csd, dialog.csd, .csd window, .csd dialog {
+  border-radius: 10px;
+}
+.maximized decoration, .fullscreen decoration, .tiled decoration, .maximized headerbar, .maximized .titlebar, window.maximized, dialog.maximized, .maximized window, .fullscreen window, .tiled window {
+  border-radius: 0;
+}
+EOF
+done
 dbus-send --session --type=signal /KWin org.kde.KWin.reloadConfig 2>/dev/null
 dbus-send --session --type=method_call --dest=org.kde.KWin /KWin org.kde.KWin.reconfigure 2>/dev/null
 exit 0

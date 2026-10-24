@@ -1,6 +1,7 @@
 import QtQuick
 import QtQuick.Layouts
 import QtQuick.Controls as QQC
+import Qt5Compat.GraphicalEffects as GE
 
 Page {
     id: p
@@ -10,11 +11,19 @@ Page {
     readonly property var o: outputs[sel] || null
     readonly property var scales: [1, 1.25, 1.5, 1.75, 2]
 
+    // se consulta en segundo plano: mientras KWin aplica un cambio, kscreen-doctor tarda y congelaba la ventana
+    property string ksJson: ""
+    property string ksText: ""
     function refresh() {
+        Sys.runAsync("ks-json", "kscreen-doctor", ["-j"])
+        Sys.runAsync("ks-text", "kscreen-doctor", ["-o"])
+    }
+    function parseOutputs() {
+        if (!ksJson || !ksText) return
         try {
-            const j = JSON.parse(Sys.run("kscreen-doctor", ["-j"], 6000))
+            const j = JSON.parse(ksJson)
             // la salida JSON no dice si la pantalla admite HDR; la de texto sí ("HDR: incapable")
-            const txt = Sys.run("kscreen-doctor", ["-o"], 6000).replace(/\x1b\[[0-9;]*m/g, "")
+            const txt = ksText.replace(/\x1b\[[0-9;]*m/g, "")
             const hdrCap = {}
             for (const block of txt.split(/^Output: /m).slice(1)) {
                 const name = block.split(/\s+/)[1]
@@ -22,14 +31,47 @@ Page {
                 hdrCap[name] = !!m && m[1] !== "incapable"
             }
             outputs = j.outputs.filter(x => x.connected).map(x => Object.assign(x, { hdrCapable: !!hdrCap[x.name] }))
-        } catch (e) { outputs = [] }
+            // la disposición ya refleja lo que se arrastró (o lo que se revirtió)
+            pendingPos = ({})
+        } catch (e) {}
+        ksJson = ""; ksText = ""
     }
-    Component.onCompleted: { refresh(); refreshBrillo() }
+    // posición elegida al arrastrar, mientras KWin la aplica (el monitor no vuelve atrás entretanto)
+    property var pendingPos: ({})
+    Component.onCompleted: { refresh(); refreshBrillo(); refreshNames() }
+    // nombre comercial de cada monitor (EDID), como en macOS ("LG ULTRAGEAR", "Mi Monitor")
+    property var names: ({})
+    function refreshNames() {
+        const code = "import glob\nfor d in sorted(glob.glob('/sys/class/drm/card*-*')):\n" +
+            "    try: e=open(d+'/edid','rb').read()\n    except Exception: continue\n    n=''\n" +
+            "    for i in range(54,126,18):\n" +
+            "        if len(e)>i+5 and e[i:i+3]==b'\\0\\0\\0' and e[i+3]==0xfc: n=e[i+5:i+18].split(b'\\n')[0].decode(errors='ignore').strip()\n" +
+            "    if e: print(d.split('-',1)[1]+'|'+n)\n"
+        const r = {}
+        for (const l of Sys.run("python3", ["-c", code], 4000).split("\n")) { const f = l.split("|"); if (f.length === 2 && f[1]) r[f[0]] = f[1] }
+        names = r
+    }
+    function label(out) { return names[out.name] || out.name }
+    // fondo del escritorio para las miniaturas
+    readonly property string wallpaper: {
+        const m = Sys.readText(Sys.home() + "/.config/plasma-org.kde.plasma.desktop-appletsrc").match(/^Image=(.+)$/m)
+        if (!m) return ""
+        let u = m[1].trim()
+        if (u.indexOf("file://") !== 0) u = "file://" + u
+        // carpeta de fondo dinámico (paquete): usa su primera imagen
+        if (!/\.(jpe?g|png|webp|avif|bmp)$/i.test(u)) {
+            const dir = u.replace("file://", "").replace(/\/$/, "") + "/contents/images"
+            const imgs = Sys.listDir(dir)
+            return imgs.length ? "file://" + imgs[0] : ""   // listDir da rutas completas
+        }
+        return u
+    }
     // Brillo por DDC/CI a través de PowerDevil (KWin no siempre lo expone en todas las pantallas)
     property var brillo: ({})
-    function refreshBrillo() {
+    function refreshBrillo() { Sys.runAsync("brillo-lista", Sys.home() + "/.local/bin/vitrum-brillo", []) }
+    function parseBrillo(out) {
         const b = {}
-        for (const l of Sys.run(Sys.home() + "/.local/bin/vitrum-brillo", [], 6000).split("\n")) {
+        for (const l of out.split("\n")) {
             const f = l.split("|")
             if (f.length === 4 && f[0]) b[f[0]] = { obj: f[1], label: f[2], pct: Number(f[3]) }
         }
@@ -79,34 +121,146 @@ Page {
             }
         }
     }
-    Connections { target: Sys; function onFinished(tag) { if (tag === "kscreen") p.refresh() } }
+    Connections {
+        target: Sys
+        function onFinished(tag, code, out) {
+            if (tag === "kscreen") p.refresh()
+            else if (tag === "ks-json") { p.ksJson = code === 0 ? out : "{\"outputs\":[]}"; p.parseOutputs() }
+            else if (tag === "ks-text") { p.ksText = out || " "; p.parseOutputs() }
+            else if (tag === "brillo-lista") p.parseBrillo(out || "")
+        }
+    }
 
-    // Miniaturas de los monitores, como en macOS
+    // Disposición de los monitores, como en macOS Sequoia: a escala y en su posición real (también la altura
+    // relativa), con el fondo de pantalla dentro, la barra de menús en la principal y el nombre debajo.
+    // Se arrastran para colocarlos; al soltar se pegan al borde del otro monitor y se aplica (con confirmación).
     Card {
-        RowItem {
-            minHeight: 120
-            title: ""
-            Row {
-                spacing: 18
-                Repeater {
-                    model: p.outputs
-                    Column {
-                        spacing: 6
-                        Rectangle {
-                            width: 120 * Math.min(1.3, modelData.size.width / 1920); height: width * modelData.size.height / Math.max(1, modelData.size.width)
-                            radius: 6
-                            color: index === p.sel ? Theme.accent : Theme.switchOff
-                            border.width: 3; border.color: Theme.dark ? "#111" : "#333"
-                            // la pantalla principal lleva la barra de menús, como en macOS
-                            Rectangle { visible: modelData.priority === 1; x: 3; y: 3; width: parent.width - 6; height: 5; color: "white"; opacity: 0.85 }
-                            MouseArea { anchors.fill: parent; onClicked: p.sel = index }
+        Item {
+            id: arr
+            Layout.fillWidth: true
+            Layout.preferredHeight: p.outputs.length > 1 ? 210 : 170
+            // geometría lógica de cada salida (tamaño del modo / escala, girado si hace falta)
+            function geo(o) {
+                const rot = o.rotation === 2 || o.rotation === 8
+                const w = (rot ? o.size.height : o.size.width) / (o.scale || 1)
+                const h = (rot ? o.size.width : o.size.height) / (o.scale || 1)
+                const q = p.pendingPos[o.name]
+                return { x: q ? q.x : o.pos.x, y: q ? q.y : o.pos.y, w: w, h: h }
+            }
+            readonly property var geos: p.outputs.map(o => geo(o))
+            readonly property rect box: {
+                if (!geos.length) return Qt.rect(0, 0, 1, 1)
+                let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity
+                for (const g of geos) { x0 = Math.min(x0, g.x); y0 = Math.min(y0, g.y); x1 = Math.max(x1, g.x + g.w); y1 = Math.max(y1, g.y + g.h) }
+                return Qt.rect(x0, y0, x1 - x0, y1 - y0)
+            }
+            // escala: deja margen para el nombre y para arrastrar
+            readonly property real k: Math.min((width - 120) / box.width, (height - 56) / box.height, 0.16)
+            readonly property real ox: (width - box.width * k) / 2
+            readonly property real oy: 16 + (height - 56 - box.height * k) / 2
+
+            // al soltar: posición lógica propuesta → pegada al monitor más cercano → se aplica
+            function drop(idx, nx, ny) {
+                const g = geos[idx]
+                let best = null, bestD = Infinity
+                for (let j = 0; j < geos.length; ++j) {
+                    if (j === idx) continue
+                    const o = geos[j]
+                    const clampY = (y) => Math.max(o.y - g.h + 1, Math.min(o.y + o.h - 1, y))
+                    const clampX = (x) => Math.max(o.x - g.w + 1, Math.min(o.x + o.w - 1, x))
+                    for (const c of [{ x: o.x - g.w, y: clampY(ny) }, { x: o.x + o.w, y: clampY(ny) },
+                                     { x: clampX(nx), y: o.y - g.h }, { x: clampX(nx), y: o.y + o.h }]) {
+                        // alinear arriba, abajo o al centro si se queda cerca (como el imán de macOS)
+                        const vert = c.x === o.x - g.w || c.x === o.x + o.w
+                        const snapT = 0.06 * (vert ? o.h : o.w)
+                        if (vert) { for (const t of [o.y, o.y + o.h - g.h, o.y + (o.h - g.h) / 2]) if (Math.abs(c.y - t) < snapT) { c.y = t; break } }
+                        else { for (const t of [o.x, o.x + o.w - g.w, o.x + (o.w - g.w) / 2]) if (Math.abs(c.x - t) < snapT) { c.x = t; break } }
+                        const d = Math.hypot(c.x - nx, c.y - ny)
+                        if (d < bestD) { bestD = d; best = c }
+                    }
+                }
+                if (!best) return
+                const pos = geos.map((q, j) => j === idx ? { x: Math.round(best.x), y: Math.round(best.y) } : { x: q.x, y: q.y })
+                // KWin quiere coordenadas desde 0,0
+                const mx = Math.min(...pos.map(q => q.x)), my = Math.min(...pos.map(q => q.y))
+                const args = [], revert = [], pend = {}
+                p.outputs.forEach((o, j) => {
+                    pend[o.name] = { x: pos[j].x - mx, y: pos[j].y - my }
+                    args.push("output." + o.name + ".position." + pend[o.name].x + "," + pend[o.name].y)
+                    revert.push("output." + o.name + ".position." + o.pos.x + "," + o.pos.y)
+                })
+                p.pendingPos = pend
+                p.applySafe(args, revert)
+            }
+
+            Repeater {
+                model: p.outputs
+                Item {
+                    id: mon
+                    required property var modelData
+                    required property int index
+                    readonly property var g: arr.geos[index] || { x: 0, y: 0, w: 1, h: 1 }
+                    readonly property bool selected: index === p.sel
+                    x: arr.ox + (g.x - arr.box.x) * arr.k
+                    y: arr.oy + (g.y - arr.box.y) * arr.k
+                    width: g.w * arr.k
+                    height: g.h * arr.k
+                    z: drag.drag.active ? 2 : 1
+                    // marco del monitor (bisel oscuro) con el fondo dentro
+                    Rectangle {
+                        anchors.fill: parent
+                        radius: 5
+                        color: "#0b0b0d"
+                        border.width: mon.selected ? 3 : 1
+                        border.color: mon.selected ? Theme.accent : (Theme.dark ? Qt.rgba(1, 1, 1, 0.22) : Qt.rgba(0, 0, 0, 0.35))
+                        Image {
+                            id: wall
+                            anchors.fill: parent; anchors.margins: mon.selected ? 4 : 3
+                            source: p.wallpaper
+                            fillMode: Image.PreserveAspectCrop
+                            sourceSize.width: 400
+                            asynchronous: true
+                            visible: false
                         }
-                        Txt { anchors.horizontalCenter: parent.horizontalCenter; text: modelData.name; font.pixelSize: Theme.smallSize; color: index === p.sel ? Theme.text : Theme.secondary }
+                        Rectangle { id: wallMask; anchors.fill: wall; radius: 3; visible: false }
+                        GE.OpacityMask { anchors.fill: wall; source: wall; maskSource: wallMask; visible: wall.status === Image.Ready }
+                        // barra de menús en la pantalla principal
+                        Rectangle {
+                            visible: mon.modelData.priority === 1
+                            x: wall.x; y: wall.y; width: wall.width; height: Math.max(3, wall.height * 0.07)
+                            color: "white"; opacity: 0.85
+                        }
+                    }
+                    Txt {
+                        anchors.top: parent.bottom; anchors.topMargin: 6
+                        anchors.horizontalCenter: parent.horizontalCenter
+                        text: p.label(mon.modelData)
+                        font.pixelSize: Theme.smallSize
+                        font.weight: mon.selected ? Font.DemiBold : Font.Normal
+                        color: mon.selected ? Theme.text : Theme.secondary
+                    }
+                    MouseArea {
+                        id: drag
+                        anchors.fill: parent
+                        cursorShape: p.outputs.length > 1 ? (pressed ? Qt.ClosedHandCursor : Qt.OpenHandCursor) : Qt.ArrowCursor
+                        drag.target: p.outputs.length > 1 ? mon : null
+                        drag.threshold: 4
+                        onPressed: p.sel = mon.index
+                        onReleased: {
+                            if (!drag.drag.active && Math.abs(mon.x - (arr.ox + (mon.g.x - arr.box.x) * arr.k)) < 1) return
+                            const nx = arr.box.x + (mon.x - arr.ox) / arr.k
+                            const ny = arr.box.y + (mon.y - arr.oy) / arr.k
+                            // queda en la posición elegida (pendingPos) mientras KWin la aplica
+                            mon.x = Qt.binding(() => arr.ox + (mon.g.x - arr.box.x) * arr.k)
+                            mon.y = Qt.binding(() => arr.oy + (mon.g.y - arr.box.y) * arr.k)
+                            arr.drop(mon.index, nx, ny)
+                        }
                     }
                 }
             }
         }
     }
+    Note { visible: p.outputs.length > 1; text: "Arrastra las pantallas para colocarlas como están en tu escritorio. La barra blanca indica la pantalla principal." }
     Card {
         visible: !!p.o
         RowItem {

@@ -94,4 +94,160 @@ for sh in ("shaders/onscreen_rounded.frag", "shaders/onscreen_rounded_core.frag"
     edit(sh, lambda s: must(must(s, "void main(void)", SQUIRCLE_SDF),
                             "sdfRoundedBox(vertex, box.xy, box.zw, cornerRadius)",
                             "vitrumSdfBox(vertex, box.xy, box.zw, cornerRadius)"))
+# Vitrum: material en el espacio de color de macOS (gamma) en cualquier salida, también HDR (ver
+# shaders/vitrumcolor.glsl), con el tinte y el filo interior aplicados por el efecto en las superficies de vitrum-shell
+shutil.copy(os.path.join(here, "..", "shaders", "vitrumcolor.glsl"), os.path.join(dst, "shaders"))
+edit("vitrumblur.qrc", lambda s: must(s, "</qresource>\n</RCC>",
+     '</qresource>\n<qresource prefix="/opengl/">\n  <file alias="vitrumcolor.glsl">shaders/vitrumcolor.glsl</file>\n</qresource>\n</RCC>'))
+
+def blur_h(s):
+    s = must(s, "    std::optional<QMatrix4x4> colorMatrix;\n};",
+             "    std::optional<QMatrix4x4> colorMatrix;\n\n"
+             "    /**\n     * Vitrum: intensidad del efecto de contraste (en vitrum-shell lleva el tinte del material, ver vitrumTint).\n     */\n"
+             "    qreal intensity = 1.0;\n};")
+    extra = "        int tfTypeLocation;\n        int tfLumLocation;\n        int toSrgbLocation;\n        int fromSrgbLocation;\n        int tintLocation;\n        int edgeLightLocation;\n"
+    s = must(s, "        int halfpixelLocation;\n    } m_onscreenPass;", "        int halfpixelLocation;\n" + extra + "    } m_onscreenPass;")
+    s = must(s, "        int opacityLocation;\n    } m_roundedOnscreenPass;", "        int opacityLocation;\n" + extra + "    } m_roundedOnscreenPass;")
+    s = must(s, "#pragma once\n", "#pragma once\n\n#include <QVector2D>\n")
+    return s
+edit("blur.h", blur_h)
+
+def blur_cpp_color(s):
+    s = must(s, '#include "core/rendertarget.h"', '#include "core/colorspace.h"\n#include "core/rendertarget.h"')
+    s = must(s, "    const qreal vitrumRadius = vitrumCornerRadius(w);\n",
+             "    const qreal vitrumRadius = std::max(vitrumCornerRadius(w), materialRadius);\n")
+    for p in ("m_onscreenPass", "m_roundedOnscreenPass"):
+        old = f'        {p}.halfpixelLocation = {p}.shader->uniformLocation("halfpixel");\n'
+        s = must(s, old, old + "".join(f'        {p}.{n}Location = {p}.shader->uniformLocation("{n}");\n'
+                                       for n in ("tfType", "tfLum", "toSrgb", "fromSrgb", "tint", "edgeLight")))
+        old = f'        {p}.shader->setUniform({p}.colorMatrixLocation, colorMatrix);\n'
+        s = must(s, old, old + f'        {p}.shader->setUniform({p}.tfTypeLocation, int(tf.type));\n'
+                               f'        {p}.shader->setUniform({p}.tfLumLocation, tfLum);\n'
+                               f'        {p}.shader->setUniform({p}.toSrgbLocation, toSrgb);\n'
+                               f'        {p}.shader->setUniform({p}.fromSrgbLocation, toSrgb.inverted());\n'
+                               f'        {p}.shader->setUniform({p}.tintLocation, tint);\n'
+                               f'        {p}.shader->setUniform({p}.edgeLightLocation, edgeLight);\n')
+    s = must(s, "    std::optional<qreal> contrast;\n",
+             "    std::optional<qreal> contrast;\n    qreal intensity = 1.0;\n")
+    s = must(s, "            contrast = surface->contrast()->contrast();\n",
+             "            contrast = surface->contrast()->contrast();\n            intensity = surface->contrast()->intensity();\n")
+    s = must(s, "static QMatrix4x4 colorTransformMatrix(", TINT_FN + "static QMatrix4x4 colorTransformMatrix(")
+    s = must(s, "        data.frame = frame;\n", "        data.frame = frame;\n        data.intensity = intensity;\n")
+    s = must(s, "    const float modulation = opacity * opacity;\n",
+             "    const float modulation = opacity * opacity;\n\n"
+             "    // Vitrum: codificación de la salida, para aplicar el material en gamma 2,2 relativa al blanco de referencia\n"
+             "    const auto &cd = renderTarget.colorDescription();\n"
+             "    const TransferFunction tf = cd->transferFunction();\n"
+             "    const QVector3D tfLum(tf.minLuminance, tf.maxLuminance, cd->referenceLuminance());\n"
+             "    const QMatrix4x4 toSrgb = Colorimetry::BT709.fromXYZ() * cd->containerColorimetry().toXYZ();\n"
+             "    qreal materialRadius;\n    QVector2D tint;\n    float edgeLight;\n    vitrumTint(w, blurInfo.intensity, materialRadius, tint, edgeLight);\n")
+    return s
+
+TINT_FN = """// Vitrum: las superficies de vitrum-shell (app vitrum-ajustes) llevan su material en la intensidad del efecto de
+// contraste, que KWin no usa: intensidad = 10 × radio de esquina + tinte. El tinte (< 1 → capa negra de alfa
+// 1 - tinte; > 1 → capa blanca de alfa tinte - 1) se aplica así en el mismo espacio de color que la saturación y el
+// contraste, y no lo mezcla KWin en lineal (en HDR se veía grisáceo). Con él, el efecto pinta también el filo
+// interior de 1 px (blanco al 17 %, medido en macOS), que en lineal se veía como una línea blanca brillante.
+// El radio va aquí porque el dock y los paneles son superficies layer-shell, sin título donde indicarlo.
+static void vitrumTint(const EffectWindow *w, qreal intensity, qreal &radius, QVector2D &tint, float &edgeLight)
+{
+    radius = 0;
+    tint = QVector2D(1.0f, 0.0f);
+    edgeLight = 0.0f;
+    if (intensity < 10.0 || w->window()->resourceClass() != QLatin1String("vitrum-ajustes")) {
+        return;
+    }
+    radius = std::floor(intensity / 10.0);
+    const qreal t = intensity - radius * 10.0;
+    if (t < 1.0) {
+        tint = QVector2D(std::max(0.0, t), 0.0f);
+    } else {
+        const float a = std::min(1.0, t - 1.0);
+        tint = QVector2D(1.0f - a, a);
+    }
+    edgeLight = 0.17f;
+}
+
+"""
+edit("blur.cpp", blur_cpp_color)
+
+def include_color(s):
+    lines = s.split("\n"); i = 0
+    while i < len(lines) and lines[i].startswith("#"):
+        i += 1
+    lines.insert(i, '\n#include "vitrumcolor.glsl"' if i else '#include "vitrumcolor.glsl"\n')
+    return "\n".join(lines)
+for sh in ("shaders/onscreen.frag", "shaders/onscreen_core.frag"):
+    edit(sh, lambda s: must(include_color(s), "(sum / 12.0) * colorMatrix", "vitrumMaterial(sum / 12.0, colorMatrix, 0.0)"))
+EDGE = """    float f = vitrumSdfBox(vertex, box.xy, box.zw, cornerRadius);
+    float df = fwidth(f);
+    float cover = 1.0 - clamp(0.5 + f / df, 0.0, 1.0);
+    // franja [0, 1] px dentro del borde: el filo blanco, con cobertura exacta por píxel
+    float inner = 1.0 - clamp(0.5 + (f + 1.0) / df, 0.0, 1.0);
+    float band = cover > 0.0 ? (cover - inner) / cover : 0.0;
+    {out} = vitrumMaterial(sum / 12.0, colorMatrix, edgeLight * band) * opacity * cover;"""
+for sh, out in (("shaders/onscreen_rounded.frag", "vec4 fragColor"), ("shaders/onscreen_rounded_core.frag", "fragColor")):
+    old = f"""    {out} = (sum / 12.0) * colorMatrix * opacity;
+
+    float f = vitrumSdfBox(vertex, box.xy, box.zw, cornerRadius);
+    float df = fwidth(f);
+    fragColor *= 1.0 - clamp(0.5 + f / df, 0.0, 1.0);"""
+    edit(sh, lambda s, old=old, out=out: must(include_color(s), old, EDGE.replace("{out}", out)))
+# desenfoque en el espacio de trabajo: la primera pasada de reducción convierte cada muestra desde la salida
+def downsample(s, tex):
+    s = include_color(s)
+    s = must(s, "uniform float offset;\n", "uniform float offset;\n// 1 en la primera pasada: convierte de la codificación de la salida al espacio de trabajo\nuniform float toWork;\n")
+    s = must(s, "void main(void)\n",
+             f"vec4 fetch(vec2 p)\n{{\n    vec4 c = {tex}(texUnit, p);\n    return toWork > 0.5 ? vitrumToWork(c) : c;\n}}\n\nvoid main(void)\n")
+    body = s[s.index("void main(void)"):]
+    s = s[:s.index("void main(void)")] + body.replace(f"{tex}(texUnit, ", "fetch(")
+    return s
+edit("shaders/downsample.frag", lambda s: downsample(s, "texture2D"))
+edit("shaders/downsample_core.frag", lambda s: downsample(s, "texture"))
+
+def blur_cpp_downsample(s):
+    p = "m_downsamplePass"
+    old = f'        {p}.halfpixelLocation = {p}.shader->uniformLocation("halfpixel");\n'
+    s = must(s, old, old + "".join(f'        {p}.{n}Location = {p}.shader->uniformLocation("{n}");\n'
+                                   for n in ("tfType", "tfLum", "toSrgb", "fromSrgb", "toWork")))
+    s = must(s, f"        {p}.shader->setUniform({p}.offsetLocation, float(m_offset));\n",
+             f"        {p}.shader->setUniform({p}.offsetLocation, float(m_offset));\n"
+             f"        {{\n"
+             f"            // Vitrum: la primera pasada pasa el fondo al espacio de trabajo (ver shaders/vitrumcolor.glsl)\n"
+             f"            const auto &cd = renderTarget.colorDescription();\n"
+             f"            const TransferFunction tf = cd->transferFunction();\n"
+             f"            {p}.shader->setUniform({p}.tfTypeLocation, int(tf.type));\n"
+             f"            {p}.shader->setUniform({p}.tfLumLocation, QVector3D(tf.minLuminance, tf.maxLuminance, cd->referenceLuminance()));\n"
+             f"            const QMatrix4x4 toSrgb = Colorimetry::BT709.fromXYZ() * cd->containerColorimetry().toXYZ();\n"
+             f"            {p}.shader->setUniform({p}.toSrgbLocation, toSrgb);\n"
+             f"            {p}.shader->setUniform({p}.fromSrgbLocation, toSrgb.inverted());\n"
+             f"        }}\n")
+    s = must(s, f"            {p}.shader->setUniform({p}.halfpixelLocation, halfpixel);\n",
+             f"            {p}.shader->setUniform({p}.halfpixelLocation, halfpixel);\n"
+             f"            {p}.shader->setUniform({p}.toWorkLocation, i == 1 ? 1.0f : 0.0f);\n")
+    return s
+edit("blur.cpp", blur_cpp_downsample)
+edit("blur.h", lambda s: must(s, "        int halfpixelLocation;\n    } m_downsamplePass;",
+                              "        int halfpixelLocation;\n        int tfTypeLocation;\n        int tfLumLocation;\n        int toSrgbLocation;\n        int fromSrgbLocation;\n        int toWorkLocation;\n    } m_downsamplePass;"))
+# compensación HDR del material (solo superficies de vitrum-shell en salidas HDR)
+def blur_cpp_hdr(s):
+    for p in ("m_onscreenPass", "m_roundedOnscreenPass"):
+        old = f'        {p}.edgeLightLocation = {p}.shader->uniformLocation("edgeLight");\n'
+        s = must(s, old, old + f'        {p}.blackLiftLocation = {p}.shader->uniformLocation("blackLift");\n')
+        old = f'        {p}.shader->setUniform({p}.edgeLightLocation, edgeLight);\n'
+        s = must(s, old, old + f'        {p}.shader->setUniform({p}.blackLiftLocation, blackLift);\n')
+    s = must(s, "    vitrumTint(w, blurInfo.intensity, materialRadius, tint, edgeLight);\n",
+             "    vitrumTint(w, blurInfo.intensity, materialRadius, tint, edgeLight);\n"
+             "    // salida HDR: hay margen por encima del blanco de referencia (o es PQ)\n"
+             "    const bool hdrOutput = tf.type == TransferFunction::PerceptualQuantizer || cd->referenceLuminance() < tf.maxLuminance * 0.95;\n"
+             "    const float blackLift = (materialRadius > 0 && hdrOutput) ? float(m_hdrBlackLift) : 0.0f;\n")
+    s = must(s, "    m_noiseStrength = VitrumBlurConfig::noiseStrength();\n",
+             "    m_noiseStrength = VitrumBlurConfig::noiseStrength();\n"
+             "    m_hdrBlackLift = std::clamp(KSharedConfig::openConfig(QStringLiteral(\"kwinrc\"))->group(QStringLiteral(\"Effect-vitrumblur\")).readEntry(\"HdrBlackLift\", 0.03), 0.0, 0.3);\n")
+    return s
+edit("blur.cpp", blur_cpp_hdr)
+edit("blur.h", lambda s: must(must(must(s,
+    "        int edgeLightLocation;\n    } m_onscreenPass;", "        int edgeLightLocation;\n        int blackLiftLocation;\n    } m_onscreenPass;"),
+    "        int edgeLightLocation;\n    } m_roundedOnscreenPass;", "        int edgeLightLocation;\n        int blackLiftLocation;\n    } m_roundedOnscreenPass;"),
+    "    int m_noiseStrength;\n", "    int m_noiseStrength;\n    qreal m_hdrBlackLift = 0.03;\n"))
 print("parche aplicado en", dst)

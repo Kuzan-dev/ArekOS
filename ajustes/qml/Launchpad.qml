@@ -32,11 +32,33 @@ Window {
     readonly property int pages: Math.max(1, Math.ceil(apps.length / perPage))
     property int page: 0
     property bool shown: false
+    // Selección con el teclado (como en macOS): al escribir se marca el primer resultado; las flechas mueven
+    // la selección por la cuadrícula (y cambian de página al pasar el borde) e Intro abre la app marcada.
+    property int sel: -1
+    function select(i) {
+        if (!apps.length) { sel = -1; return }
+        sel = Math.max(0, Math.min(apps.length - 1, i))
+        page = Math.floor(sel / perPage)
+    }
+    function move(dx, dy) {
+        if (sel < 0) { select(page * perPage); return }
+        const inPage = sel % perPage, col = inPage % cols, row = Math.floor(inPage / cols)
+        if (dx !== 0) {
+            // a la derecha desde la última columna salta a la página siguiente (y al revés)
+            if (dx > 0 && col === cols - 1) select((page + 1) * perPage + row * cols)
+            else if (dx < 0 && col === 0) { if (page > 0) select((page - 1) * perPage + row * cols + cols - 1) }
+            else select(sel + dx)
+        } else {
+            const t = sel + dy * cols
+            if (t >= page * perPage && t < (page + 1) * perPage && t < apps.length) select(t)
+            else if (dy > 0 && t >= apps.length && Math.floor((apps.length - 1) / perPage) === page) select(apps.length - 1)
+        }
+    }
 
     function toggle() { shown ? close2() : open2() }
     function open2() {
         allApps = Sys.apps()
-        search.text = ""; page = 0
+        search.text = ""; page = 0; sel = -1
         showFullScreen(); shown = true
         Qt.callLater(() => { updateBlur(); search.forceActiveFocus() })
     }
@@ -88,11 +110,17 @@ Window {
                 verticalAlignment: TextInput.AlignVCenter
                 color: "white"; selectionColor: Theme.accent
                 font.family: Theme.font; font.pixelSize: 15 * lp.s
-                onTextChanged: lp.page = 0
+                onTextChanged: { lp.page = 0; lp.sel = text.trim() ? 0 : -1 }
                 Keys.onEscapePressed: text ? text = "" : lp.close2()
-                Keys.onReturnPressed: if (lp.apps.length) lp.launch(lp.apps[lp.page * lp.perPage])
-                Keys.onRightPressed: lp.page = Math.min(lp.pages - 1, lp.page + 1)
-                Keys.onLeftPressed: lp.page = Math.max(0, lp.page - 1)
+                Keys.onReturnPressed: if (lp.apps.length) lp.launch(lp.apps[Math.max(0, lp.sel)])
+                Keys.onEnterPressed: if (lp.apps.length) lp.launch(lp.apps[Math.max(0, lp.sel)])
+                // sin búsqueda ni selección, izquierda/derecha cambian de página; si hay selección, la mueven
+                Keys.onRightPressed: (e) => { if (lp.sel < 0 && !text) lp.page = Math.min(lp.pages - 1, lp.page + 1); else if (lp.sel >= 0 || cursorPosition === text.length) lp.move(1, 0); else e.accepted = false }
+                Keys.onLeftPressed: (e) => { if (lp.sel < 0 && !text) lp.page = Math.max(0, lp.page - 1); else if (lp.sel >= 0) lp.move(-1, 0); else e.accepted = false }
+                Keys.onDownPressed: lp.move(0, 1)
+                Keys.onUpPressed: lp.move(0, -1)
+                Keys.onTabPressed: lp.move(1, 0)
+                Keys.onBacktabPressed: lp.move(-1, 0)
             }
         }
 
@@ -117,19 +145,31 @@ Window {
                                 model: lp.apps.slice(pg.index * lp.perPage, (pg.index + 1) * lp.perPage)
                                 Item {
                                     required property var modelData
+                                    required property int index
+                                    readonly property bool selected: lp.sel === pg.index * lp.perPage + index
                                     width: 215 * lp.s; height: 174 * lp.s
+                                    // resaltado de la selección: recuadro redondeado translúcido que abarca icono y nombre,
+                                    // dentro de la celda (el área de páginas recorta lo que sobresale)
+                                    Rectangle {
+                                        visible: parent.selected
+                                        anchors.horizontalCenter: parent.horizontalCenter
+                                        y: 0
+                                        width: parent.width - 6 * lp.s; height: 150 * lp.s; radius: 16 * lp.s
+                                        color: Qt.rgba(1, 1, 1, 0.18)
+                                        border.width: 1; border.color: Qt.rgba(1, 1, 1, 0.22)
+                                    }
                                     Kirigami.Icon {
                                         id: ic
                                         anchors.horizontalCenter: parent.horizontalCenter
                                         width: 110 * lp.s; height: width
-                                        y: -6 * lp.s
+                                        y: 8 * lp.s
                                         source: modelData.icon || "application-x-executable"
                                         scale: ma.pressed ? 0.92 : 1
                                     }
                                     Text {
                                         anchors.top: ic.bottom; anchors.topMargin: 1 * lp.s
                                         anchors.horizontalCenter: parent.horizontalCenter
-                                        width: parent.width - 20 * lp.s
+                                        width: parent.width - 24 * lp.s
                                         horizontalAlignment: Text.AlignHCenter
                                         text: modelData.name
                                         elide: Text.ElideRight
@@ -138,7 +178,7 @@ Window {
                                         renderType: Text.NativeRendering
                                         style: Text.Raised; styleColor: Qt.rgba(0, 0, 0, 0.45)
                                     }
-                                    MouseArea { id: ma; anchors.fill: parent; onClicked: lp.launch(modelData) }
+                                    MouseArea { id: ma; anchors.fill: parent; hoverEnabled: true; onClicked: lp.launch(modelData) }
                                 }
                             }
                         }

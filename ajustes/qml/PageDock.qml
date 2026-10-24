@@ -68,6 +68,16 @@ Page {
             }
         }
         RowItem {
+            title: "Botones de la vista previa"
+            subtitle: "Cerrar, minimizar y maximizar cada ventana al pasar el puntero por su miniatura"
+            MacPopup {
+                readonly property var vals: ["abajo", "arriba"]
+                model: ["Abajo", "Arriba"]
+                currentIndex: Math.max(0, vals.indexOf(p.dockConf("PreviewButtons", "abajo")))
+                onActivated: (i) => p.setDock("PreviewButtons", vals[i])
+            }
+        }
+        RowItem {
             title: "Ocultar y mostrar el Dock automáticamente"
             MacSwitch {
                 checked: p.dockConf("Autohide", "false") === "true"

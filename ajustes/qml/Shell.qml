@@ -1,4 +1,5 @@
 import QtQuick
+import org.kde.taskmanager as TaskManager
 
 // Escritorio de Vitrum: dock, Launchpad y Spotlight en un solo proceso (se abren al instante).
 QtObject {
@@ -47,7 +48,31 @@ QtObject {
             } catch (e) {}
         }
     }
+    // Spectacle (captura de pantalla): Launchpad está en la capa superior y Spotlight/Centro de Control en la de
+    // superposición, con el teclado: tapaban el editor de Spectacle y se quedaban con Esc (que cerraba la captura).
+    // Al arrancar Spectacle o aparecer una ventana suya se cierran, con un pequeño retraso para que la captura
+    // los incluya (como en macOS).
+    function closeOverlays() {
+        if (launchpad.shown) launchpad.close2()
+        if (spotlight.visible) spotlight.close2()
+        if (controlCenter.visible) controlCenter.close2()
+    }
+    property var spectacleTimer: Timer { interval: 700; onTriggered: closeOverlays() }
+    property var spectacleWatch: Connections {
+        target: Sys
+        function onServiceRegistered(name) { if (name === "org.kde.spectacle") spectacleTimer.restart() }
+    }
+    property var spectacleWindows: Instantiator {
+        model: TaskManager.TasksModel { groupMode: TaskManager.TasksModel.GroupDisabled; filterByScreen: false; filterByVirtualDesktop: false; filterByActivity: false }
+        delegate: QtObject {
+            required property var model
+            readonly property bool spectacle: /spectacle/i.test(String(model.AppId || ""))
+            readonly property bool active: spectacle && model.IsActive === true
+            Component.onCompleted: if (spectacle) spectacleTimer.restart()
+            onActiveChanged: if (active) spectacleTimer.restart()
+        }
+    }
     // El esquema de color puede cambiar en cualquier momento (modo claro/oscuro)
     property var themeWatch: Timer { interval: 1500; running: true; repeat: true; onTriggered: { Theme.refresh(); dock.reload() } }
-    Component.onCompleted: Theme.refresh()
+    Component.onCompleted: { Theme.refresh(); Sys.watchService("org.kde.spectacle") }
 }

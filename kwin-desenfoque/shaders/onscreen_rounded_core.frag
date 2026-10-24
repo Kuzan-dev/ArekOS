@@ -1,5 +1,7 @@
 #version 140
 
+#include "vitrumcolor.glsl"
+
 #include "sdf.glsl"
 
 uniform sampler2D texUnit;
@@ -40,9 +42,11 @@ void main(void)
     sum += texture(texUnit, uv + vec2(0.0, -halfpixel.y * 2.0) * offset);
     sum += texture(texUnit, uv + vec2(-halfpixel.x, -halfpixel.y) * offset) * 2.0;
 
-    fragColor = (sum / 12.0) * colorMatrix * opacity;
-
     float f = vitrumSdfBox(vertex, box.xy, box.zw, cornerRadius);
     float df = fwidth(f);
-    fragColor *= 1.0 - clamp(0.5 + f / df, 0.0, 1.0);
+    float cover = 1.0 - clamp(0.5 + f / df, 0.0, 1.0);
+    // franja [0, 1] px dentro del borde: el filo blanco, con cobertura exacta por píxel
+    float inner = 1.0 - clamp(0.5 + (f + 1.0) / df, 0.0, 1.0);
+    float band = cover > 0.0 ? (cover - inner) / cover : 0.0;
+    fragColor = vitrumMaterial(sum / 12.0, colorMatrix, edgeLight * band) * opacity * cover;
 }

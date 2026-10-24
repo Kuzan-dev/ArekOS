@@ -1,0 +1,18 @@
+/* Vitrum: 10px rounded corners in todas las esquinas de Zen Browser (igual que macOS / Vitrum) */
+:root {
+  --window-border-radius: 10px !important;
+}
+
+@media (-moz-gtk-csd-transparency-available) {
+  :root[customtitlebar][sizemode="normal"]:not([tiled]) {
+    &,
+    & > body,
+    & #browser,
+    & #zen-main-app-wrapper,
+    & #zen-browser-background,
+    & dialog::backdrop {
+      border-radius: 10px !important;
+      clip-path: inset(0 round 10px);
+    }
+  }
+}

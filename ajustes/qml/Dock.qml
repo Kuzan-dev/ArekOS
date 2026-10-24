@@ -17,6 +17,8 @@ Window {
     property int magSize: 96
     property bool indicators: true
     property bool hideOnMax: true
+    // botones de cada ventana en la vista previa: "abajo" o "arriba" de la miniatura
+    property string previewButtons: "abajo"
     // Material medido en macOS (ver tema-plasma/MATERIAL.md): desenfoque σ≈30 (fuerza 10 de KWin), saturación
     // y contraste del efecto de contraste de KWin, y una capa negra (oscuro) o blanca (claro) que fija brillo y gris.
     // Se puede recalibrar en vitrumrc [Material].
@@ -24,9 +26,11 @@ Window {
         id: mat
         readonly property bool d: Theme.dark
         property real tint: Number(Sys.readConf("vitrumrc", ["Material"], d ? "DockTintDark" : "DockTintLight", d ? "0.26" : "0.36"))
-        property real contrast: Number(Sys.readConf("vitrumrc", ["Material"], d ? "ContrastDark" : "ContrastLight", d ? "0.757" : "0.972"))
-        property real intensity: 1.0
-        property real saturation: Number(Sys.readConf("vitrumrc", ["Material"], d ? "SaturationDark" : "SaturationLight", d ? "1.63" : "1.74"))
+        property real contrast: Number(Sys.readConf("vitrumrc", ["Material"], d ? "ContrastDark" : "ContrastLight", d ? "0.813" : "0.972"))
+        // tinte en la intensidad del efecto (ver Material.qml): lo aplica el desenfoque en el espacio de macOS
+        property real intensity: Material.fx ? 10 * Math.round(dock.radius) + (d ? 1 - tint : 1 + tint) : 1.0
+        onIntensityChanged: dock.updateRegions()
+        property real saturation: Number(Sys.readConf("vitrumrc", ["Material"], d ? "SaturationDark" : "SaturationLight", d ? "1.54" : "1.74"))
         onContrastChanged: dock.updateRegions()
         onSaturationChanged: dock.updateRegions()
     }
@@ -42,6 +46,7 @@ Window {
         magSize = Math.max(tile, Math.min(128, Number(c("MagnificationSize", "96"))))
         indicators = c("ShowIndicators", "true") === "true"
         hideOnMax = c("HideOnMaximize", "true") === "true"
+        previewButtons = c("PreviewButtons", "abajo") === "arriba" ? "arriba" : "abajo"
     }
     readonly property bool vertical: position !== "bottom"
     readonly property int iconSize: Math.round(tile * 0.9)
@@ -61,12 +66,14 @@ Window {
     DockPreview { id: preview; dock: dock; screen: dock.screen }
     Timer {
         id: previewTimer; interval: 600
-        onTriggered: if (dock.hoverApp && dock.hoverHasWindows) {
-            const off = dock.position === "bottom" ? Qt.point(0, (dock.screen ? dock.screen.height : dock.height) - dock.height)
-                      : dock.position === "right" ? Qt.point((dock.screen ? dock.screen.width : dock.width) - dock.width, 0) : Qt.point(0, 0)
-            preview.show(dock.hoverApp, Qt.point(dock.hoverPos.x + off.x, dock.hoverPos.y + off.y))
-            dock.hoverName = ""      // la vista previa ya muestra los títulos
-        }
+        onTriggered: if (dock.hoverApp && dock.hoverHasWindows) dock.showPreview(dock.hoverApp)
+    }
+    // vista previa de una app sobre el último icono señalado (dock.hoverPos, en coordenadas del dock)
+    function showPreview(app) {
+        const off = dock.position === "bottom" ? Qt.point(0, (dock.screen ? dock.screen.height : dock.height) - dock.height)
+                  : dock.position === "right" ? Qt.point((dock.screen ? dock.screen.width : dock.width) - dock.width, 0) : Qt.point(0, 0)
+        preview.show(app, Qt.point(dock.hoverPos.x + off.x, dock.hoverPos.y + off.y))
+        dock.hoverName = ""      // la vista previa ya muestra los títulos
     }
     function debugPreview(app) { preview.show(app, Qt.point((screen ? screen.width : width) / 2, (screen ? screen.height : height) - thick + headroom)) }
     Timer { id: previewHide; interval: 350; onTriggered: if (!preview.hovered && !dock.hoverApp) preview.hide2() }
@@ -98,13 +105,31 @@ Window {
         model: winTasks
         delegate: QtObject {
             required property var model
-            readonly property bool covers: model.IsWindow === true && (model.IsMaximized === true || model.IsFullScreen === true) && model.IsMinimized !== true
+            // se aparta de cualquier ventana que invada su zona (maximizada, en mosaico o simplemente grande),
+            // como «Esquivar ventanas» de KDE; la zona es fija, así que ocultarse no cambia el resultado
+            readonly property rect geo: model.Geometry || Qt.rect(0, 0, 0, 0)
+            readonly property bool covers: model.IsWindow === true && model.IsMinimized !== true
+                && (model.IsFullScreen === true || model.IsMaximized === true || dock.intersectsZone(geo, dock.zoneVersion))
             onCoversChanged: dock.recountCover()
             Component.onDestruction: Qt.callLater(dock.recountCover)
         }
         onObjectAdded: Qt.callLater(dock.recountCover)
         onObjectRemoved: Qt.callLater(dock.recountCover)
         id: coverInst
+    }
+    // zona del dock en coordenadas globales (lógicas), sin ampliación ni desplazamiento de ocultar
+    property int zoneVersion: 0
+    onWidthChanged: zoneVersion++
+    onHeightChanged: zoneVersion++
+    function intersectsZone(g, _v) {
+        if (!screen || g.width <= 0) return false
+        const sx = screen.virtualX, sy = screen.virtualY, sw = screen.width, sh = screen.height
+        const len = vertical ? bg.height : bg.width
+        let z
+        if (position === "bottom") z = Qt.rect(sx + (sw - len) / 2, sy + sh - gap - barH, len, barH + gap)
+        else if (position === "left") z = Qt.rect(sx, sy + (sh - len) / 2, barH + gap, len)
+        else z = Qt.rect(sx + sw - gap - barH, sy + (sh - len) / 2, barH + gap, len)
+        return g.x < z.x + z.width && g.x + g.width > z.x && g.y < z.y + z.height && g.y + g.height > z.y
     }
     function recountCover() {
         let n = 0
@@ -156,6 +181,24 @@ Window {
     // con "apartarse de las ventanas maximizadas" no reserva espacio: la ventana maximizada ocupa toda la pantalla
     LayerShell.Window.exclusionZone: autohide || hideOnMax ? 0 : barH + gap
     LayerShell.Window.keyboardInteractivity: LayerShell.Window.KeyboardInteractivityNone
+
+    // Clic en el icono de una app: la trae al frente (su última ventana usada, restaurada si estaba minimizada).
+    // Para elegir otra ventana, o cerrarla, minimizarla o maximizarla, está la vista previa (pasar el puntero).
+    function clickApp(index, model, item) {
+        const i = tasks.makeModelIndex(index)
+        if (model.IsLauncher && !model.IsWindow) { tasks.requestNewInstance(i); return }
+        if (model.IsGroupParent === true) {
+            // Plasma no activa un grupo: la ventana usada más recientemente
+            let best = 0, bestT = -1
+            for (let k = 0; k < tasks.rowCount(i); ++k) {
+                const t = tasks.data(tasks.makeModelIndex(index, k), TaskManager.AbstractTasksModel.LastActivated)
+                const ms = t ? new Date(t).getTime() : 0
+                if (ms > bestT) { bestT = ms; best = k }
+            }
+            tasks.requestActivate(tasks.makeModelIndex(index, best))
+        } else tasks.requestActivate(i)
+        preview.hide2()
+    }
 
     // Cambiar de pantalla (o de borde) una superficie layer-shell exige volver a crearla (ocultar y mostrar)
     function remap() { visible = false; remapTimer.restart() }
@@ -250,9 +293,9 @@ Window {
             MaterialEdge {
                 anchors.fill: parent
                 radius: dock.radius
-                fill: Theme.dark ? Qt.rgba(0, 0, 0, mat.tint) : Qt.rgba(1, 1, 1, mat.tint)
+                fill: Material.fx ? "transparent" : Theme.dark ? Qt.rgba(0, 0, 0, mat.tint) : Qt.rgba(1, 1, 1, mat.tint)
                 outline: Qt.rgba(0, 0, 0, Theme.dark ? 0.28 : 0.08)
-                highlight: Qt.rgba(1, 1, 1, 0.17)
+                highlight: Material.highlight
             }
             // la región de desenfoque sigue al fondo en el mismo fotograma (antes iba con retraso y se
             // veían el marco y el contenido moverse por separado)
@@ -300,11 +343,7 @@ Window {
                         running: model.IsWindow === true
                         active: model.IsActive === true
                         starting: model.IsStartup === true
-                        onClicked: {
-                            const i = tasks.makeModelIndex(index)
-                            if (model.IsLauncher && !model.IsWindow) tasks.requestNewInstance(i)
-                            else tasks.requestActivate(i)
-                        }
+                        onClicked: dock.clickApp(index, model, this)
                         onMenuRequested: (x, y) => dockMenu.openFor(index, model, this, x, y)
                     }
                     DockIcon {
@@ -364,42 +403,39 @@ Window {
         }
     }
 
-    // Menú contextual de cada icono
-    QQC.Menu {
+    // Menú contextual de cada icono: menú nativo (lo dibuja Darkly, como el del escritorio y el de las apps)
+    QtObject {
         id: dockMenu
-        popupType: QQC.Popup.Window
-        property int idx: -1
-        property var m: null
+        property bool visible: false
         function openFor(index, model, item, x, y) {
-            idx = index; m = model
-            popup(item, x, y)
-        }
-        readonly property string launcher: m ? String(m.LauncherUrlWithoutIcon || "") : ""
-        readonly property bool kept: launcher !== "" && dock.pinned.indexOf(dock.launcherId(launcher)) >= 0
-        QQC.MenuItem { text: "Nueva ventana"; visible: !!dockMenu.m && dockMenu.m.CanLaunchNewInstance !== false; onTriggered: tasks.requestNewInstance(tasks.makeModelIndex(dockMenu.idx)) }
-        QQC.MenuSeparator {}
-        QQC.MenuItem {
-            text: dockMenu.kept ? "Eliminar del Dock" : "Mantener en el Dock"
-            onTriggered: {
-                const id = dock.launcherId(dockMenu.launcher)
+            const launcher = String(model.LauncherUrlWithoutIcon || "")
+            const kept = launcher !== "" && dock.pinned.indexOf(dock.launcherId(launcher)) >= 0
+            const isWin = model.IsWindow === true
+            const items = [], acts = []
+            const add = (text, f) => { items.push({ text: text }); acts.push(f) }
+            const sep = () => { items.push({ separator: true }); acts.push(null) }
+            if (model.CanLaunchNewInstance !== false) { add("Nueva ventana", () => tasks.requestNewInstance(tasks.makeModelIndex(index))); sep() }
+            add(kept ? "Eliminar del Dock" : "Mantener en el Dock", () => {
+                const id = dock.launcherId(launcher)
                 const list = dock.pinned.slice()
-                if (dockMenu.kept) list.splice(list.indexOf(id), 1); else list.push(id)
+                if (kept) list.splice(list.indexOf(id), 1); else list.push(id)
                 dock.save(list)
-            }
+            })
+            if (isWin) { sep(); add("Salir", () => tasks.requestClose(tasks.makeModelIndex(index))) }
+            // opciones del Dock, como al hacer clic derecho en el separador en macOS
+            sep()
+            add(dock.autohide ? "Desactivar ocultación" : "Activar ocultación",
+                () => { Sys.writeConf("vitrumrc", ["Dock"], "Autohide", dock.autohide ? "false" : "true"); dock.reload() })
+            add(dock.magnify ? "Desactivar ampliación" : "Activar ampliación",
+                () => { Sys.writeConf("vitrumrc", ["Dock"], "Magnification", dock.magnify ? "false" : "true"); dock.reload() })
+            add("Preferencias del Dock…", () => Sys.detached(Sys.home() + "/.local/bin/vitrum-ajustes", ["dock"]))
+            // encima del icono, centrado (o a su lado con el Dock vertical)
+            const r = item.mapToItem(null, 0, 0)
+            visible = true
+            const chosen = Sys.nativeMenu(dock, r.x, r.y, item.width, item.height, items, dock.position)
+            visible = false
+            if (chosen >= 0 && acts[chosen]) acts[chosen]()
         }
-        QQC.MenuSeparator { visible: !!dockMenu.m && dockMenu.m.IsWindow === true }
-        QQC.MenuItem { text: "Salir"; visible: !!dockMenu.m && dockMenu.m.IsWindow === true; onTriggered: tasks.requestClose(tasks.makeModelIndex(dockMenu.idx)) }
-        // Opciones del Dock, como al hacer clic derecho en el separador en macOS
-        QQC.MenuSeparator {}
-        QQC.MenuItem {
-            text: dock.autohide ? "Desactivar ocultación" : "Activar ocultación"
-            onTriggered: { Sys.writeConf("vitrumrc", ["Dock"], "Autohide", dock.autohide ? "false" : "true"); dock.reload() }
-        }
-        QQC.MenuItem {
-            text: dock.magnify ? "Desactivar ampliación" : "Activar ampliación"
-            onTriggered: { Sys.writeConf("vitrumrc", ["Dock"], "Magnification", dock.magnify ? "false" : "true"); dock.reload() }
-        }
-        QQC.MenuItem { text: "Preferencias del Dock…"; onTriggered: Sys.detached(Sys.home() + "/.local/bin/vitrum-ajustes", ["dock"]) }
     }
 
     onTileChanged: Qt.callLater(updateRegions)

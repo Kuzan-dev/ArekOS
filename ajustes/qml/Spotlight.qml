@@ -29,7 +29,7 @@ Window {
     }
     function close2() { hide(); query.text = "" }
     function search(text) { if (!visible) open2(); query.text = text }
-    function updateBlur() { if (visible) Sys.setBlur(sp, box.x, box.y, box.width, box.height, box.radius, Material.contrast, 1.0, Material.saturation) }
+    function updateBlur() { if (visible) Sys.setBlur(sp, box.x, box.y, box.width, box.height, box.radius, Material.contrast, Material.intensity(box.radius), Material.saturation) }
     onWidthChanged: Qt.callLater(updateBlur)
     onHeightChanged: Qt.callLater(updateBlur)
 

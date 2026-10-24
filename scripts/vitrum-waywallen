@@ -1,0 +1,156 @@
+#!/bin/bash
+# Vitrum: fondos animados de Wallpaper Engine (escenas, vídeo y web) con waywallen.
+#   - waywallen (Flatpak de Flathub) con su complemento open-wallpaper-engine, que lee los fondos de la biblioteca
+#     de Steam (~/.local/share/Steam/steamapps/workshop/content/431960)
+#   - integración con Plasma (tipo de fondo «org.waywallen.kde»), con el nombre real de cada monitor (EDID)
+#   - arranque automático del demonio sin ventana (restaura el último fondo)
+#   - NVIDIA: textura compartida desactivada en el renderizador web (si no, los fondos web salen en negro)
+# Uso: vitrum-waywallen [--aplicar | --arrancar]
+#   --aplicar   pone los escritorios en el fondo de waywallen (si ya lo usaban, se mantiene sin pedirlo)
+#   --arrancar  (arranque automático) sincroniza la pantalla de bloqueo y arranca el demonio sin ventana
+set -u
+VER_DISPLAY=0.4.3
+VER_OWE=0.3.1
+APP=org.waywallen.waywallen
+OWE=org.waywallen.open-wallpaper-engine
+aplicar=false
+[ "${1:-}" = --aplicar ] && aplicar=true
+conf=$HOME/.var/app/$APP/config/waywallen/config.toml
+
+# Pantalla de bloqueo con el mismo fondo animado que el escritorio:
+#  - al bloquear, waywallen detenía todos los fondos (session_locked = stop) y el bloqueo salía negro; con
+#    «pause» se pausan los del escritorio y los del bloqueo siguen (waywallen exime de esa pausa al bloqueo)
+#  - cada pantalla del bloqueo («kde-lock-<id>») recuerda su propio fondo: se le copia el de su monitor en el
+#    escritorio («kde-<id>»). El demonio solo lee su configuración al arrancar: se hace con él parado.
+sincronizar_bloqueo() {
+    [ -f "$conf" ] || return 0
+    python3 - "$conf" <<'PY'
+import re, sys, tomllib
+p = sys.argv[1]
+text = open(p).read()
+cfg = tomllib.loads(text)
+text = re.sub(r'(?m)^session_locked = "stop"$', 'session_locked = "pause"', text)
+for key, prefs in (cfg.get("display") or {}).items():
+    if not key.startswith("kde-") or key.startswith("kde-lock-") or "last_wallpaper" not in prefs:
+        continue
+    lock, wp = "kde-lock-" + key[4:], prefs["last_wallpaper"]
+    head = "[display.%s]" % lock
+    if head in text:
+        a = text.index(head)
+        b = text.find("\n[", a + 1)
+        b = len(text) if b < 0 else b + 1
+        block = text[a:b]
+        if re.search(r'(?m)^last_wallpaper = ', block):
+            block = re.sub(r'(?m)^last_wallpaper = .*$', 'last_wallpaper = "%s"' % wp, block)
+        else:
+            block = block.replace(head + "\n", head + '\nlast_wallpaper = "%s"\n' % wp, 1)
+        text = text[:a] + block + text[b:]
+    else:
+        text = text.rstrip("\n") + '\n\n%s\nlast_wallpaper = "%s"\n' % (head, wp)
+open(p, "w").write(text)
+PY
+}
+if [ "${1:-}" = --arrancar ]; then
+    pgrep -f "bwrap.*waywallen" >/dev/null || { sincronizar_bloqueo; exec flatpak run "$APP" --no-ui; }
+    exit 0
+fi
+
+command -v flatpak >/dev/null || { echo "waywallen: falta flatpak"; exit 0; }
+arch=$(uname -m)
+cache=$HOME/.cache/vitrum-src/waywallen
+mkdir -p "$cache"
+
+# 1) la aplicación
+flatpak remote-add --user --if-not-exists flathub https://dl.flathub.org/repo/flathub.flatpakrepo >/dev/null 2>&1
+if ! flatpak info "$APP" >/dev/null 2>&1; then
+    flatpak install --user -y --noninteractive flathub "$APP" >/dev/null 2>&1 || { echo "waywallen: no se pudo instalar"; exit 0; }
+fi
+flatpak override --user --talk-name='org.mpris.MediaPlayer2.*' "$APP"   # música que suena (fondos de audio)
+
+descargar() {   # url destino
+    [ -s "$cache/$2" ] && return 0
+    curl -fsSL -o "$cache/$2.part" "$1" && mv -f "$cache/$2.part" "$cache/$2"
+}
+
+# 2) integración con Plasma
+kde="waywallen-kde-$VER_DISPLAY-$arch-embed.zip"
+if descargar "https://github.com/waywallen/waywallen-display/releases/download/v$VER_DISPLAY/$kde" "$kde"; then
+    kpackagetool6 --type Plasma/Wallpaper -u "$cache/$kde" >/dev/null 2>&1 \
+        || kpackagetool6 --type Plasma/Wallpaper -i "$cache/$kde" >/dev/null 2>&1
+fi
+
+# 3) complemento de Wallpaper Engine (lo mismo que hace «Instalar complemento» en la app)
+owe="$OWE-$VER_OWE-linux-$arch.zip"
+dest=$HOME/.var/app/$APP/data/waywallen/plugins/$OWE
+if descargar "https://github.com/waywallen/open-wallpaper-engine/releases/download/v$VER_OWE/$owe" "$owe"; then
+    if [ "$(sed -n 's/^version = "\(.*\)"/\1/p' "$dest/plugin.toml" 2>/dev/null)" != "$VER_OWE" ]; then
+        rm -rf "$dest.nuevo"; mkdir -p "$dest.nuevo"
+        unzip -q -o "$cache/$owe" -d "$dest.nuevo" && rm -rf "$dest" && mv "$dest.nuevo" "$dest"
+    fi
+    # NVIDIA: la textura compartida de CEF no funciona (fondos web en negro)
+    if [ -e /proc/driver/nvidia/version ] && [ -f "$dest/plugin.toml" ]; then
+        sed -i 's/^shared_texture_enabled = { type = "bool", default = true,/shared_texture_enabled = { type = "bool", default = false,/' "$dest/plugin.toml"
+    fi
+fi
+
+# 4) arranque automático del demonio, sin ventana (icono en la bandeja)
+mkdir -p "$HOME/.config/autostart"
+cat > "$HOME/.config/autostart/$APP.desktop" <<FIN
+[Desktop Entry]
+Type=Application
+Name=Waywallen
+Comment=Fondos animados (Wallpaper Engine)
+Exec=$HOME/.local/bin/vitrum-waywallen --arrancar
+Icon=$APP
+X-GNOME-Autostart-enabled=true
+NoDisplay=true
+FIN
+
+# 5) escritorios: nombre real de cada monitor y, si se pide (o ya se usaba), el fondo de waywallen
+if dbus-send --session --print-reply --dest=org.kde.plasmashell /PlasmaShell org.freedesktop.DBus.Peer.Ping >/dev/null 2>&1; then
+    mapa=$(python3 - <<'PY'
+import glob, json, subprocess
+names = {}
+for d in sorted(glob.glob('/sys/class/drm/card*-*')):
+    try:
+        e = open(d + '/edid', 'rb').read()
+    except Exception:
+        continue
+    n = ''
+    for i in range(54, 126, 18):
+        if len(e) > i + 5 and e[i:i+3] == b'\0\0\0' and e[i+3] == 0xfc:
+            n = e[i+5:i+18].split(b'\n')[0].decode(errors='ignore').strip()
+    if e and n:
+        names[d.split('-', 1)[1]] = n
+out = {}
+try:
+    for o in json.loads(subprocess.run(['kscreen-doctor', '-j'], capture_output=True, text=True, timeout=10).stdout)['outputs']:
+        if o.get('enabled') and o['name'] in names:
+            out['%d,%d' % (o['pos']['x'], o['pos']['y'])] = names[o['name']]
+except Exception:
+    pass
+print(json.dumps(out))
+PY
+)
+    dbus-send --session --print-reply --dest=org.kde.plasmashell /PlasmaShell org.kde.PlasmaShell.evaluateScript string:"
+const nombres = $mapa;
+const aplicar = $aplicar;
+for (const d of desktops()) {
+    const g = screenGeometry(d.screen);
+    const n = nombres[g.x + ',' + g.y];
+    if (aplicar || d.wallpaperPlugin === 'org.waywallen.kde') d.wallpaperPlugin = 'org.waywallen.kde';
+    d.currentConfigGroup = ['Wallpaper', 'org.waywallen.kde', 'General'];
+    if (n && !d.readConfig('DisplayName', '')) d.writeConfig('DisplayName', n);   // respeta un nombre ya puesto
+}" >/dev/null 2>&1
+fi
+
+# pantalla de bloqueo: el mismo fondo animado que el escritorio
+if grep -q "^wallpaperplugin=org.waywallen.kde$" "$HOME/.config/plasma-org.kde.plasma.desktop-appletsrc" 2>/dev/null; then
+    kwriteconfig6 --file kscreenlockerrc --group Greeter --key WallpaperPlugin org.waywallen.kde
+fi
+
+# el demonio: se reinicia para aplicar la sincronización del bloqueo (solo lee su configuración al arrancar)
+if pgrep -f "bwrap.*waywallen" >/dev/null; then flatpak kill "$APP" >/dev/null 2>&1; sleep 2; fi
+sincronizar_bloqueo
+(setsid flatpak run "$APP" --no-ui >/dev/null 2>&1 &)
+echo "waywallen listo"

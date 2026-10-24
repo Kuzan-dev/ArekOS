@@ -1,0 +1,16 @@
+#!/bin/bash
+# Vitrum: esquinas de 10 px en Zen Browser (Flatpak), como el resto de ventanas.
+# Zen dibuja su propio marco (CSD) con el radio del tema GTK (Breeze: 6 px) y, al ser Flatpak, no lee
+# ~/.config/gtk-*; se le da acceso de solo lectura y se añade un userChrome.css a cada perfil.
+# Uso: vitrum-zen [carpeta con zen-userChrome.css]
+src=${1:-$HOME/.cache/vitrum-src/integracion}/zen-userChrome.css
+flatpak info app.zen_browser.zen >/dev/null 2>&1 || exit 0
+flatpak override --user --filesystem=xdg-config/gtk-3.0:ro --filesystem=xdg-config/gtk-4.0:ro app.zen_browser.zen
+base=$HOME/.var/app/app.zen_browser.zen/.zen
+[ -d "$base" ] || exit 0
+for p in "$base"/*/; do
+    [ -f "$p/prefs.js" ] || [ -f "$p/times.json" ] || continue      # solo perfiles reales
+    mkdir -p "$p/chrome"; cp "$src" "$p/chrome/userChrome.css"
+    grep -q 'legacyUserProfileCustomizations.stylesheets' "$p/user.js" 2>/dev/null \
+        || echo 'user_pref("toolkit.legacyUserProfileCustomizations.stylesheets", true);' >> "$p/user.js"
+done

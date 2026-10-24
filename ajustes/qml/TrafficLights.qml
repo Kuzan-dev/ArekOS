@@ -9,11 +9,17 @@ Item {
     width: 52
     height: 12
     property bool hovered: hov.containsMouse
+    // external: no actúa sobre su ventana, solo avisa (p. ej. en las miniaturas de la vista previa del Dock)
+    property bool external: false
+    property bool alwaysColored: false
+    signal closeClicked()
+    signal minimizeClicked()
+    signal zoomClicked()
     readonly property var win: Window.window
     readonly property var fills: ["#FF5F57", "#FEBC2E", "#28C840"]
     readonly property var rims: ["#E0443E", "#DEA123", "#1AAB29"]
     readonly property var glyphs: ["#4D0000", "#995700", "#006500"]
-    readonly property bool colored: (win && win.active) || hovered
+    readonly property bool colored: alwaysColored || (win && win.active) || hovered
     MouseArea { id: hov; anchors.fill: parent; anchors.margins: -4; hoverEnabled: true; acceptedButtons: Qt.NoButton }
     Repeater {
         model: 3
@@ -51,6 +57,10 @@ Item {
                 id: ma
                 anchors.fill: parent
                 onClicked: {
+                    if (tl.external) {
+                        if (index === 0) tl.closeClicked(); else if (index === 1) tl.minimizeClicked(); else tl.zoomClicked()
+                        return
+                    }
                     if (index === 0) tl.win.close()
                     else if (index === 1) tl.win.showMinimized()
                     else tl.win.visibility === Window.Maximized ? tl.win.showNormal() : tl.win.showMaximized()

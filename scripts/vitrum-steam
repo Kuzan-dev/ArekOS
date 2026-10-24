@@ -18,14 +18,29 @@ if command -v steam >/dev/null 2>&1 || [ -d "$native_dir" ] || [ -d "$flatpak_di
 fi
 [ "$steam_instalado" = true ] || exit 0
 
-# 1. Regla en KWin para forzar la decoración sin bordes propios (KWin recorta esquinas a 10 px y dibuja sombra)
+# 1. Reglas en KWin:
+#    a) Big Picture: sin bordes ni decoración para permitir Direct Scanout a 120/144 Hz sin lag
+#    b) Escritorio: decorado por Vitrum sin barra redundante pero con esquinas de 10 px y sombra
 rules=$(kreadconfig6 --file kwinrulesrc --group General --key rules 2>/dev/null || true)
-if [[ ",$rules," != *",steam-rule,"* ]]; then
-    new_rules="${rules:+$rules,}steam-rule"
-    kwriteconfig6 --file kwinrulesrc --group General --key rules "$new_rules"
-    count=$(echo "$new_rules" | tr ',' '\n' | grep -c .)
-    kwriteconfig6 --file kwinrulesrc --group General --key count "$count"
-fi
+for r in steam-bigpicture-rule steam-rule; do
+    if [[ ",$rules," != *",$r,"* ]]; then
+        rules="${rules:+$rules,}$r"
+    fi
+done
+kwriteconfig6 --file kwinrulesrc --group General --key rules "$rules"
+count=$(echo "$rules" | tr ',' '\n' | grep -c .)
+kwriteconfig6 --file kwinrulesrc --group General --key count "$count"
+
+kwriteconfig6 --file kwinrulesrc --group steam-bigpicture-rule --key Description "Steam Big Picture Native Fullscreen"
+kwriteconfig6 --file kwinrulesrc --group steam-bigpicture-rule --key title "Big Picture"
+kwriteconfig6 --file kwinrulesrc --group steam-bigpicture-rule --key titlematch 2
+kwriteconfig6 --file kwinrulesrc --group steam-bigpicture-rule --key types 1
+kwriteconfig6 --file kwinrulesrc --group steam-bigpicture-rule --key wmclass steam
+kwriteconfig6 --file kwinrulesrc --group steam-bigpicture-rule --key wmclasscomplete false
+kwriteconfig6 --file kwinrulesrc --group steam-bigpicture-rule --key wmclassmatch 1
+kwriteconfig6 --file kwinrulesrc --group steam-bigpicture-rule --key noborder true
+kwriteconfig6 --file kwinrulesrc --group steam-bigpicture-rule --key noborderrule 2
+
 kwriteconfig6 --file kwinrulesrc --group steam-rule --key Description "Steam Vitrum Decoration"
 kwriteconfig6 --file kwinrulesrc --group steam-rule --key noborder false
 kwriteconfig6 --file kwinrulesrc --group steam-rule --key noborderrule 2

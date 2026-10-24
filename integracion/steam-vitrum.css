@@ -1,0 +1,5 @@
+/* Vitrum: colores del tema oscuro para Steam (Adwaita-for-Steam) */
+:root {
+    --adw-window-bg: #1e1e24 !important;
+    --adw-headerbar-bg: #18181c !important;
+}

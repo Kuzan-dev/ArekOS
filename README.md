@@ -18,6 +18,7 @@ Entorno de escritorio de alto rendimiento para **KDE Plasma 6 (Wayland)**, con d
 | **Ajustes del Sistema & Esquinas Activas** | Aplicación nativa de configuración con estética unificada y modal de **Esquinas Activas** (*Hot Corners*) para disparar Mission Control, escritorio o bloqueo de pantalla. |
 | **Pantallas de Bloqueo y Login** | Pantalla de bloqueo nativa en KWin con hora vibrante y píldora de contraseña, más pantalla de inicio de sesión sobre Plasma Login con conmutación de seguridad hacia la pantalla original ante fallos. |
 | **Fondos Dinámicos & Waywallen** | Integración nativa con Wallpaper Engine (vía Flatpak waywallen) para fondos animados por monitor y sincronización con el bloqueo. |
+| **Integraciones de Apps (Steam & Zen)** | Adaptación automática con controles macOS a la izquierda, esquinas redondeadas de 10 px y sombra integrada sin barras redundantes. |
 
 ---
 

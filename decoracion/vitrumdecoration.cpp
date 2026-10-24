@@ -94,9 +94,10 @@ Decoration::~Decoration() = default;
 bool Decoration::init()
 {
     auto w = window();
-    // Ajustes del Sistema y Vista rápida de Vitrum dibujan sus propios semáforos (como las apps de macOS
-    // con barra lateral a toda altura): sin barra de título, pero con esquinas y sombra
-    m_noTitleBar = w->windowClass().contains(QLatin1String("vitrum"), Qt::CaseInsensitive);
+    // Ajustes del Sistema, Vista rápida de Vitrum y Steam (con tema Adwaita macOS) dibujan sus propios semáforos:
+    // sin barra de título redundante, pero con esquinas redondeadas de 10 px y sombra de macOS
+    m_noTitleBar = w->windowClass().contains(QLatin1String("vitrum"), Qt::CaseInsensitive)
+                || w->windowClass().contains(QLatin1String("steam"), Qt::CaseInsensitive);
 
     if (!m_noTitleBar)
         m_buttons = new KDecoration3::DecorationButtonGroup(KDecoration3::DecorationButtonGroup::Position::Left, this, &Button::create);

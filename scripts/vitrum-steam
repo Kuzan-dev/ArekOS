@@ -1,0 +1,67 @@
+#!/bin/bash
+# Vitrum: integración de Steam (nativo y Flatpak).
+#   - Aplica regla en KWin (kwinrulesrc) para decorar la ventana de Steam: al tener soporte en
+#     org.vitrum.decoracion.so (m_noTitleBar), KWin no añade barra superior redundante pero sí
+#     aplica las esquinas redondeadas de 10 px y la sombra nativa de macOS del sistema.
+#   - Instala/configura Adwaita-for-Steam con controles estilo macOS a la izquierda y colores del tema Vitrum.
+# Uso: vitrum-steam [carpeta con steam-vitrum.css]
+set -u
+
+src=${1:-$HOME/.cache/vitrum-src/integracion}/steam-vitrum.css
+native_dir="$HOME/.local/share/Steam"
+flatpak_dir="$HOME/.var/app/com.valvesoftware.Steam/data/Steam"
+
+# Comprobar si Steam está instalado
+steam_instalado=false
+if command -v steam >/dev/null 2>&1 || [ -d "$native_dir" ] || [ -d "$flatpak_dir" ]; then
+    steam_instalado=true
+fi
+[ "$steam_instalado" = true ] || exit 0
+
+# 1. Regla en KWin para forzar la decoración sin bordes propios (KWin recorta esquinas a 10 px y dibuja sombra)
+rules=$(kreadconfig6 --file kwinrulesrc --group General --key rules 2>/dev/null || true)
+if [[ ",$rules," != *",steam-rule,"* ]]; then
+    new_rules="${rules:+$rules,}steam-rule"
+    kwriteconfig6 --file kwinrulesrc --group General --key rules "$new_rules"
+    count=$(echo "$new_rules" | tr ',' '\n' | grep -c .)
+    kwriteconfig6 --file kwinrulesrc --group General --key count "$count"
+fi
+kwriteconfig6 --file kwinrulesrc --group steam-rule --key Description "Steam Vitrum Decoration"
+kwriteconfig6 --file kwinrulesrc --group steam-rule --key noborder false
+kwriteconfig6 --file kwinrulesrc --group steam-rule --key noborderrule 2
+kwriteconfig6 --file kwinrulesrc --group steam-rule --key types 1
+kwriteconfig6 --file kwinrulesrc --group steam-rule --key wmclass steam
+kwriteconfig6 --file kwinrulesrc --group steam-rule --key wmclasscomplete false
+kwriteconfig6 --file kwinrulesrc --group steam-rule --key wmclassmatch 1
+qdbus-qt6 org.kde.KWin /KWin reconfigure >/dev/null 2>&1 || true
+
+# 2. Configurar tema Adwaita-for-Steam con controles macOS y paleta Vitrum
+instalar_adwaita_steam() {
+    local target="$1"
+    local steam_path="$2"
+    local adw_dir="$steam_path/steamui/adwaita"
+
+    if [ ! -d "$adw_dir" ]; then
+        local repo_tmp="$HOME/.cache/vitrum-src/Adwaita-for-Steam"
+        if [ ! -d "$repo_tmp" ]; then
+            mkdir -p "$(dirname "$repo_tmp")"
+            git clone -q --depth 1 https://github.com/tkashkin/Adwaita-for-Steam.git "$repo_tmp" 2>/dev/null || true
+        fi
+        if [ -f "$repo_tmp/install.py" ]; then
+            local cmd_args=(-t "$target" -c adwaita -s dark --windowcontrols-theme macos --windowcontrols-layout macos)
+            [ -f "$src" ] && cmd_args+=(--custom-css "$src")
+            (cd "$repo_tmp" && python3 install.py "${cmd_args[@]}" >/dev/null 2>&1) || true
+        fi
+    fi
+
+    # Asegurar colores Vitrum en config.css
+    if [ -f "$adw_dir/config.css" ] && [ -f "$src" ]; then
+        if ! grep -q "adw-headerbar-bg: #18181c" "$adw_dir/config.css" 2>/dev/null; then
+            cat "$src" >> "$adw_dir/config.css"
+        fi
+    fi
+}
+
+[ -d "$native_dir" ] && instalar_adwaita_steam "default" "$native_dir"
+[ -d "$flatpak_dir" ] && instalar_adwaita_steam "flatpak" "$flatpak_dir"
+exit 0

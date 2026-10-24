@@ -158,7 +158,7 @@ cp -r "$REPO_DIR/ajustes/qml" "$HOME/.local/share/vitrum-ajustes/"
 
 for s in vitrum-modo vitrum-plasma-set vitrum-disposicion vitrum-esquemas vitrum-klassy \
          vitrum-bandeja vitrum-brillo vitrum-raton vitrum-pantalla-cambio \
-         vitrum-cc-estado vitrum-cc-detalle vitrum-vista-rapida vitrum-desenfoque-construir vitrum-zen vitrum-waywallen; do
+         vitrum-cc-estado vitrum-cc-detalle vitrum-vista-rapida vitrum-desenfoque-construir vitrum-zen vitrum-steam vitrum-waywallen; do
     cp "$REPO_DIR/scripts/$s" "$HOME/.local/bin/$s"
     chmod +x "$HOME/.local/bin/$s"
 done
@@ -318,6 +318,8 @@ fi
 "$HOME/.local/bin/vitrum-klassy"
 # Zen Browser (si está instalado): mismas esquinas de 10 px que el resto de ventanas
 "$HOME/.local/bin/vitrum-zen" "$REPO_DIR/integracion" || true
+# Steam (si está instalado): controles macOS integrados, esquinas de 10 px y sombra nativa
+"$HOME/.local/bin/vitrum-steam" "$REPO_DIR/integracion" || true
 
 echo "==> [7/7] Aplicando disposición de barra de menús, Dock, atajos y tema..."
 # Respaldo de seguridad de la disposición previa

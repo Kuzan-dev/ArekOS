@@ -183,21 +183,43 @@ Window {
     LayerShell.Window.keyboardInteractivity: LayerShell.Window.KeyboardInteractivityNone
 
     // Clic en el icono de una app: la trae al frente (su última ventana usada, restaurada si estaba minimizada).
+    // Con la app ya delante y varias ventanas, cada clic trae la anterior en el orden de uso (y vuelve a empezar
+    // tras la más antigua). El orden se fija al empezar la ronda: si se recalculara, solo alternaría entre dos.
     // Para elegir otra ventana, o cerrarla, minimizarla o maximizarla, está la vista previa (pasar el puntero).
+    property string cycleApp: ""
+    property var cycleIds: []        // ids de ventana (WinIdList[0]) de la más a la menos reciente
+    property int cyclePos: 0
     function clickApp(index, model, item) {
         const i = tasks.makeModelIndex(index)
         if (model.IsLauncher && !model.IsWindow) { tasks.requestNewInstance(i); return }
-        if (model.IsGroupParent === true) {
-            // Plasma no activa un grupo: la ventana usada más recientemente
-            let best = 0, bestT = -1
-            for (let k = 0; k < tasks.rowCount(i); ++k) {
-                const t = tasks.data(tasks.makeModelIndex(index, k), TaskManager.AbstractTasksModel.LastActivated)
-                const ms = t ? new Date(t).getTime() : 0
-                if (ms > bestT) { bestT = ms; best = k }
-            }
-            tasks.requestActivate(tasks.makeModelIndex(index, best))
-        } else tasks.requestActivate(i)
         preview.hide2()
+        if (model.IsGroupParent !== true) { tasks.requestActivate(i); cycleApp = ""; return }
+        const R = TaskManager.AbstractTasksModel
+        const wins = []
+        for (let k = 0; k < tasks.rowCount(i); ++k) {
+            const ix = tasks.makeModelIndex(index, k)
+            const ids = tasks.data(ix, R.WinIdList)
+            const t = tasks.data(ix, R.LastActivated)
+            wins.push({ ix: ix, id: ids && ids.length ? String(ids[0]) : String(k), t: t ? new Date(t).getTime() : 0,
+                        active: tasks.data(ix, R.IsActive) === true })
+        }
+        const app = String(model.AppId || "")
+        const sameSet = cycleApp === app && cycleIds.length === wins.length && wins.every(w => cycleIds.indexOf(w.id) >= 0)
+        if (model.IsActive === true && sameSet) {
+            // siguiente de la ronda (si el usuario cambió de ventana por su cuenta, se sigue desde la que está activa)
+            const cur = wins.find(w => w.active)
+            const at = cur ? cycleIds.indexOf(cur.id) : cyclePos
+            cyclePos = ((at >= 0 ? at : cyclePos) + 1) % cycleIds.length
+        } else {
+            // nueva ronda: orden de uso de este momento
+            wins.sort((x, y) => y.t - x.t)
+            cycleApp = app
+            cycleIds = wins.map(w => w.id)
+            // si la app ya estaba delante, su ventana activa es la primera: el clic trae la anterior
+            cyclePos = model.IsActive === true && wins.length > 1 ? 1 : 0
+        }
+        const target = wins.find(w => w.id === cycleIds[cyclePos]) || wins[0]
+        tasks.requestActivate(target.ix)
     }
 
     // Cambiar de pantalla (o de borde) una superficie layer-shell exige volver a crearla (ocultar y mostrar)

@@ -2,6 +2,7 @@
 // barra de título de 28 px; semáforos de 12 px con borde de 1 px más oscuro, 20 px entre centros,
 // el primero a 14 px del borde izquierdo; esquinas de 10 px; símbolos ×, − y pantalla completa
 // en los tres botones a la vez al pasar el ratón; botones grises en ventanas inactivas.
+#include <QStringList>
 #include "vitrumdecoration.h"
 
 #include <KDecoration3/DecoratedWindow>
@@ -96,8 +97,10 @@ bool Decoration::init()
     auto w = window();
     // Ajustes del Sistema, Vista rápida de Vitrum y Steam (con tema Adwaita macOS) dibujan sus propios semáforos:
     // sin barra de título redundante, pero con esquinas redondeadas de 10 px y sombra de macOS
+    // Steam: solo su ventana principal (clase exacta «steam»); los juegos («steam_app_1234») conservan su barra
+    const QStringList cls = w->windowClass().split(QLatin1Char(' '), Qt::SkipEmptyParts);
     m_noTitleBar = w->windowClass().contains(QLatin1String("vitrum"), Qt::CaseInsensitive)
-                || w->windowClass().contains(QLatin1String("steam"), Qt::CaseInsensitive);
+                || cls.contains(QLatin1String("steam"), Qt::CaseInsensitive);
 
     if (!m_noTitleBar)
         m_buttons = new KDecoration3::DecorationButtonGroup(KDecoration3::DecorationButtonGroup::Position::Left, this, &Button::create);

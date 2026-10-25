@@ -15,7 +15,7 @@ High-performance desktop environment for **KDE Plasma 6 (Wayland)**, engineered 
 | **Vitrum Dock with Advanced Blur** | Floating dock featuring continuous curvature (*squircle*), smooth cosine zoom on hover, live window previews via PipeWire, multi-instance support, and intelligent auto-hide. |
 | **KWin Blur Effect (`vitrumblur`)** | Custom blur engine with signed distance field (SDF) continuous corner mask (*superellipse* $p=2.8$), color space correction (`vitrumcolor.glsl`) tailored for sRGB and linear-light/PQ HDR displays, and an automated watchdog service for KWin updates. |
 | **Integrated Spotlight** | Centered floating global search powered by integrated Milou/KRunner within the same process and quick shortcuts (`Super + Space` / `Alt + Space`). |
-| **Application Launchpad** | Fullscreen application grid with multi-page navigation, instant filtering, and fast launching. |
+| **Application Launchpad** | Fullscreen application grid with multi-page navigation, instant filtering, fast launching and macOS-style **automatic folders by category** (Internet, Office, Multimedia, Games…); Dock apps stay loose. Toggle it in Settings → Dock → Launchpad. |
 | **Top Bar & Control Center** | Global menu with system logo, application menus, Inter typography clock/date, minimalist system tray, and a Control Center with sliders and quick connectivity toggles. |
 | **System Settings & Hot Corners** | Native configuration app with unified aesthetics and a **Hot Corners** setup modal to trigger Mission Control, Desktop, or Screen Lock. |
 | **Lock Screen & Login** | Native KWin lock screen featuring vibrant time display and pill-shaped password input, plus a custom Plasma Login screen with automatic fallback to system defaults on failure. |
@@ -90,6 +90,7 @@ Tested on **Fedora 44 with an AMD GPU** (Radeon RX 5700, `amdgpu`), KWin/kdecora
 - **`LD_LIBRARY_PATH=$HOME/.local/lib64`** applies to the whole session: do not put other libraries in that folder.
 - **KRunner is disabled** (Alt+Space and Super+Space open Spotlight).
 - **There is no uninstaller:** only `plasma-org.kde.plasma.desktop-appletsrc` and `kglobalshortcutsrc` are backed up (`*.antes-arekos`). Before installing on your main user, back up `~/.config` and `~/.local/share`, and try it on a test user first.
+- **Power mode (Settings → Energy):** talks to the power profiles service over D-Bus, so it works with both `power-profiles-daemon` and `tuned-ppd` (Fedora's, which lacks `powerprofilesctl`).
 - **Do not use `--login` with a different Plasma Login version:** it modifies `/etc` and skips itself when the version does not match.
 
 ---

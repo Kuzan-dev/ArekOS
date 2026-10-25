@@ -15,7 +15,7 @@ Entorno de escritorio de alto rendimiento para **KDE Plasma 6 (Wayland)**, con d
 | **Dock Vitrum con Blur Avanzado** | Dock flotante con esquina continua (*squircle*), ampliación cosenoidal fluida al pasar el cursor, vista previa de ventanas en vivo vía PipeWire, soporte multi-instancia y auto-ocultación inteligente. |
 | **Efecto Desenfoque KWin (`vitrumblur`)** | Motor de desenfoque propio con máscara SDF de esquina continua (*superelipse* $p=2.8$), corrección de espacio de color (`vitrumcolor.glsl`) adaptada a sRGB y luz lineal/PQ para pantallas HDR, y guardián automático ante actualizaciones de KWin. |
 | **Spotlight Integrado** | Búsqueda global flotante centrada con Milou/KRunner integrado dentro del mismo proceso y atajos rápidos (`Super + Espacio` / `Alt + Espacio`). |
-| **Launchpad de Aplicaciones** | Cuadrícula de aplicaciones a pantalla completa con navegación por páginas, filtro instantáneo y lanzamiento rápido. |
+| **Launchpad de Aplicaciones** | Cuadrícula de aplicaciones a pantalla completa con navegación por páginas, filtro instantáneo, lanzamiento rápido y **carpetas automáticas por categoría** (Internet, Oficina, Multimedia, Juegos…) al estilo macOS; las apps del Dock quedan sueltas. Se activa o desactiva en Ajustes → Dock → Launchpad. |
 | **Barra Superior & Centro de Control** | Menú global con logo del sistema, menú de aplicaciones, fecha/reloj en tipografía Inter, bandeja minimalista y Centro de Control con deslizadores y accesos rápidos de conectividad. |
 | **Ajustes del Sistema & Esquinas Activas** | Aplicación nativa de configuración con estética unificada y modal de **Esquinas Activas** (*Hot Corners*) para disparar Mission Control, escritorio o bloqueo de pantalla. |
 | **Pantallas de Bloqueo y Login** | Pantalla de bloqueo nativa en KWin con hora vibrante y píldora de contraseña, más pantalla de inicio de sesión sobre Plasma Login con conmutación de seguridad hacia la pantalla original ante fallos. |
@@ -90,6 +90,7 @@ Probado en **Fedora 44 con GPU AMD** (Radeon RX 5700, `amdgpu`), KWin/kdecoratio
 - **`LD_LIBRARY_PATH=$HOME/.local/lib64`** se aplica a toda la sesión: no pongas otras bibliotecas en esa carpeta.
 - **KRunner queda desactivado** (Alt+Espacio y Super+Espacio abren Spotlight).
 - **No hay desinstalador:** solo se guardan copias de `plasma-org.kde.plasma.desktop-appletsrc` y `kglobalshortcutsrc` (`*.antes-arekos`). Antes de instalarlo en tu usuario principal, respalda `~/.config` y `~/.local/share`, y pruébalo primero en un usuario de pruebas.
+- **Modo de energía (Ajustes → Energía):** usa el servicio de perfiles por D-Bus, así que funciona tanto con `power-profiles-daemon` como con `tuned-ppd` (el de Fedora, que no trae `powerprofilesctl`).
 - **No uses `--login` en otra versión de Plasma Login:** toca `/etc` y se omite sola si la versión no coincide.
 
 ---

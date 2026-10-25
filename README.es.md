@@ -15,7 +15,7 @@ Entorno de escritorio de alto rendimiento para **KDE Plasma 6 (Wayland)**, con d
 | **Dock Vitrum con Blur Avanzado** | Dock flotante con esquina continua (*squircle*), ampliación cosenoidal fluida al pasar el cursor, vista previa de ventanas en vivo vía PipeWire, soporte multi-instancia y auto-ocultación inteligente. |
 | **Efecto Desenfoque KWin (`vitrumblur`)** | Motor de desenfoque propio con máscara SDF de esquina continua (*superelipse* $p=2.8$), corrección de espacio de color (`vitrumcolor.glsl`) adaptada a sRGB y luz lineal/PQ para pantallas HDR, y guardián automático ante actualizaciones de KWin. |
 | **Spotlight Integrado** | Búsqueda global flotante centrada con Milou/KRunner integrado dentro del mismo proceso y atajos rápidos (`Super + Espacio` / `Alt + Espacio`). |
-| **Launchpad de Aplicaciones** | Cuadrícula de aplicaciones a pantalla completa con navegación por páginas, filtro instantáneo y lanzamiento rápido. |
+| **Launchpad de Aplicaciones** | Cuadrícula de aplicaciones a pantalla completa con navegación por páginas, filtro instantáneo, lanzamiento rápido y **carpetas automáticas por categoría** (Internet, Oficina, Multimedia, Juegos…) al estilo macOS; las apps del Dock quedan sueltas. Se activa o desactiva en Ajustes → Dock → Launchpad. |
 | **Barra Superior & Centro de Control** | Menú global con logo del sistema, menú de aplicaciones, fecha/reloj en tipografía Inter, bandeja minimalista y Centro de Control con deslizadores y accesos rápidos de conectividad. |
 | **Ajustes del Sistema & Esquinas Activas** | Aplicación nativa de configuración con estética unificada y modal de **Esquinas Activas** (*Hot Corners*) para disparar Mission Control, escritorio o bloqueo de pantalla. |
 | **Pantallas de Bloqueo y Login** | Pantalla de bloqueo nativa en KWin con hora vibrante y píldora de contraseña, más pantalla de inicio de sesión sobre Plasma Login con conmutación de seguridad hacia la pantalla original ante fallos. |
@@ -75,6 +75,23 @@ git clone https://github.com/Kuzan-dev/ArekOS.git ~/Documentos/ArekOS && bash ~/
 - **`bash install.sh --compilar`**: Recompila desde código fuente todos los componentes C++/Qt6/KWin (`vitrum-ajustes`, `org.vitrum.decoracion.so`, `darkly6.so` y `vitrumblur.so`) dentro de un contenedor Podman aislado.
 
 > **Nota tras la primera instalación:** Al finalizar `install.sh`, **cierra sesión y vuelve a iniciar sesión** para que el compositor `kwin_wayland` tome las variables de entorno (`QT_PLUGIN_PATH` y `LD_LIBRARY_PATH`) y cargue la decoración de semáforos y el efecto `vitrumblur`.
+
+---
+
+## 🛡️ Compatibilidad y estabilidad
+
+Probado en **Fedora 44 con GPU AMD** (Radeon RX 5700, `amdgpu`), KWin/kdecoration **6.7.5** y Qt **6.11**. Los binarios de `binarios/` están compilados para esas versiones.
+
+- **GPU AMD / Intel:** el ajuste `KWIN_DRM_USE_COLOR_PIPELINE=0` (evita un crash de KWin 6.6.4 con NVIDIA) solo se aplica si se detecta NVIDIA; en AMD/Intel el color pipeline queda activo (HDR y gestión de color por hardware).
+- **Actualizaciones de Fedora (lo más importante):** la decoración de ventanas (`org.vitrum.decoracion`) y Darkly están compilados para una versión concreta de kdecoration y Qt. El guardián `vitrum-plugins-guardian.sh` lo comprueba en cada inicio de sesión: si Fedora los actualiza a otra versión (p. ej. 6.7 → 6.8), pasa a Breeze para que KWin no se caiga, y restaura los de Vitrum cuando vuelven a coincidir. Tras cada actualización grande de KDE conviene ejecutar `bash install.sh --compilar` y cerrar sesión.
+- **Desenfoque propio (`vitrumblur`):** su parche (`kwin-desenfoque/herramientas/parchear.py`) **aún no soporta KWin 6.7** (KWin cambió `QRectF` por `RectF`, quitó los shaders `_core` y modificó `blur.h`), así que se usa el desenfoque estándar de KDE, que es estable. El servicio de recompilación lo intenta **una sola vez por versión de KWin** y, si falla, no lo reintenta en cada inicio de sesión (se reintenta al cambiar KWin, con `vitrum-desenfoque-construir --forzar` o con `install.sh --compilar`).
+- **Cerrar sesión tras instalar:** KWin solo carga la decoración y los efectos de `~/.local/lib64` si arranca con el entorno que deja el instalador. Sin volver a entrar, las ventanas siguen con la decoración estándar.
+- **Navegadores Chromium (Brave, Chrome, Vivaldi) y algunas apps Electron** dibujan su propia barra de título y no muestran los semáforos. En Brave: `brave://settings/appearance` → «Usar barra de título y bordes del sistema».
+- **`LD_LIBRARY_PATH=$HOME/.local/lib64`** se aplica a toda la sesión: no pongas otras bibliotecas en esa carpeta.
+- **KRunner queda desactivado** (Alt+Espacio y Super+Espacio abren Spotlight).
+- **No hay desinstalador:** solo se guardan copias de `plasma-org.kde.plasma.desktop-appletsrc` y `kglobalshortcutsrc` (`*.antes-arekos`). Antes de instalarlo en tu usuario principal, respalda `~/.config` y `~/.local/share`, y pruébalo primero en un usuario de pruebas.
+- **Modo de energía (Ajustes → Energía):** usa el servicio de perfiles por D-Bus, así que funciona tanto con `power-profiles-daemon` como con `tuned-ppd` (el de Fedora, que no trae `powerprofilesctl`).
+- **No uses `--login` en otra versión de Plasma Login:** toca `/etc` y se omite sola si la versión no coincide.
 
 ---
 

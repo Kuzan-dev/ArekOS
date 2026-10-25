@@ -6,7 +6,10 @@ Page {
     title: "Energía"
     readonly property bool hasBattery: Sys.listDir("/sys/class/power_supply", ["BAT*"], true).length > 0
     readonly property string battery: hasBattery ? Sys.readFile(Sys.listDir("/sys/class/power_supply", ["BAT*"], true)[0] + "/capacity").trim() : ""
-    readonly property bool hasPpd: Sys.run("bash", ["-c", "command -v powerprofilesctl"]).trim() !== ""
+    // perfiles por D-Bus (busctl): funciona con power-profiles-daemon y con tuned-ppd (Fedora), que no trae powerprofilesctl
+    readonly property var ppd: ["org.freedesktop.UPower.PowerProfiles", "/org/freedesktop/UPower/PowerProfiles", "org.freedesktop.UPower.PowerProfiles", "ActiveProfile"]
+    function ppdGet() { const m = Sys.run("busctl", ["get-property"].concat(ppd)).match(/"([^"]+)"/); return m ? m[1] : "" }
+    readonly property bool hasPpd: ppdGet() !== ""
     readonly property var profiles: ["power-saver", "balanced", "performance"]
     readonly property var mins: [1, 2, 5, 10, 15, 30, 60, 0]
     readonly property var minNames: ["1 minuto", "2 minutos", "5 minutos", "10 minutos", "15 minutos", "30 minutos", "1 hora", "Nunca"]
@@ -25,12 +28,12 @@ Page {
     Card {
         RowItem {
             title: "Modo de energía"
-            subtitle: p.hasPpd ? "" : "Instala power-profiles-daemon para cambiar el modo de energía"
+            subtitle: p.hasPpd ? "" : "Instala power-profiles-daemon o tuned-ppd para cambiar el modo de energía"
             MacPopup {
                 enabled2: p.hasPpd
                 model: ["Bajo consumo", "Automático", "Alto rendimiento"]
-                currentIndex: p.hasPpd ? p.idx(p.profiles, Sys.run("powerprofilesctl", ["get"]).trim(), 1) : 1
-                onActivated: (i) => Sys.run("powerprofilesctl", ["set", p.profiles[i]])
+                currentIndex: p.hasPpd ? p.idx(p.profiles, p.ppdGet(), 1) : 1
+                onActivated: (i) => Sys.run("busctl", ["set-property"].concat(p.ppd, ["s", p.profiles[i]]))
             }
         }
     }

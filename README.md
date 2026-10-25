@@ -15,7 +15,7 @@ High-performance desktop environment for **KDE Plasma 6 (Wayland)**, engineered 
 | **Vitrum Dock with Advanced Blur** | Floating dock featuring continuous curvature (*squircle*), smooth cosine zoom on hover, live window previews via PipeWire, multi-instance support, and intelligent auto-hide. |
 | **KWin Blur Effect (`vitrumblur`)** | Custom blur engine with signed distance field (SDF) continuous corner mask (*superellipse* $p=2.8$), color space correction (`vitrumcolor.glsl`) tailored for sRGB and linear-light/PQ HDR displays, and an automated watchdog service for KWin updates. |
 | **Integrated Spotlight** | Centered floating global search powered by integrated Milou/KRunner within the same process and quick shortcuts (`Super + Space` / `Alt + Space`). |
-| **Application Launchpad** | Fullscreen application grid with multi-page navigation, instant filtering, and fast launching. |
+| **Application Launchpad** | Fullscreen application grid with multi-page navigation, instant filtering, fast launching and macOS-style **automatic folders by category** (Internet, Office, Multimedia, Games…); Dock apps stay loose. Toggle it in Settings → Dock → Launchpad. |
 | **Top Bar & Control Center** | Global menu with system logo, application menus, Inter typography clock/date, minimalist system tray, and a Control Center with sliders and quick connectivity toggles. |
 | **System Settings & Hot Corners** | Native configuration app with unified aesthetics and a **Hot Corners** setup modal to trigger Mission Control, Desktop, or Screen Lock. |
 | **Lock Screen & Login** | Native KWin lock screen featuring vibrant time display and pill-shaped password input, plus a custom Plasma Login screen with automatic fallback to system defaults on failure. |
@@ -75,6 +75,23 @@ git clone https://github.com/Kuzan-dev/ArekOS.git ~/Documentos/ArekOS && bash ~/
 - **`bash install.sh --compilar`**: Recompiles all C++/Qt6/KWin components (`vitrum-ajustes`, `org.vitrum.decoracion.so`, `darkly6.so`, and `vitrumblur.so`) from source inside an isolated Podman container.
 
 > **Note after first installation:** Once `install.sh` finishes, **log out and log back in** so that the `kwin_wayland` compositor picks up the environment variables (`QT_PLUGIN_PATH` and `LD_LIBRARY_PATH`) to load the traffic-light window decorations and `vitrumblur` effect.
+
+---
+
+## 🛡️ Compatibility & Stability
+
+Tested on **Fedora 44 with an AMD GPU** (Radeon RX 5700, `amdgpu`), KWin/kdecoration **6.7.5** and Qt **6.11**. The binaries in `binarios/` are built for those versions.
+
+- **AMD / Intel GPUs:** the `KWIN_DRM_USE_COLOR_PIPELINE=0` workaround (for a KWin 6.6.4 crash on NVIDIA) is only applied when NVIDIA is detected; on AMD/Intel the color pipeline stays enabled (HDR and hardware color management).
+- **Fedora updates (most important):** the window decoration (`org.vitrum.decoracion`) and Darkly are built for a specific kdecoration and Qt version. The `vitrum-plugins-guardian.sh` guardian checks this at every login: if Fedora updates them to another version (e.g. 6.7 → 6.8) it switches to Breeze so KWin does not crash, and restores Vitrum's once they match again. After every major KDE update run `bash install.sh --compilar` and log out.
+- **Custom blur (`vitrumblur`):** its patch (`kwin-desenfoque/herramientas/parchear.py`) **does not support KWin 6.7 yet** (KWin replaced `QRectF` with `RectF`, removed the `_core` shaders and changed `blur.h`), so KDE's stock blur is used, which is stable. The rebuild service tries **once per KWin version** and, if it fails, does not retry at every login (it retries when KWin changes, with `vitrum-desenfoque-construir --forzar` or with `install.sh --compilar`).
+- **Log out after installing:** KWin only loads the decoration and effects from `~/.local/lib64` when it starts with the environment set by the installer. Until you log in again, windows keep the stock decoration.
+- **Chromium browsers (Brave, Chrome, Vivaldi) and some Electron apps** draw their own title bar and do not show the traffic lights. In Brave: `brave://settings/appearance` → "Use system title bar and borders".
+- **`LD_LIBRARY_PATH=$HOME/.local/lib64`** applies to the whole session: do not put other libraries in that folder.
+- **KRunner is disabled** (Alt+Space and Super+Space open Spotlight).
+- **There is no uninstaller:** only `plasma-org.kde.plasma.desktop-appletsrc` and `kglobalshortcutsrc` are backed up (`*.antes-arekos`). Before installing on your main user, back up `~/.config` and `~/.local/share`, and try it on a test user first.
+- **Power mode (Settings → Energy):** talks to the power profiles service over D-Bus, so it works with both `power-profiles-daemon` and `tuned-ppd` (Fedora's, which lacks `powerprofilesctl`).
+- **Do not use `--login` with a different Plasma Login version:** it modifies `/etc` and skips itself when the version does not match.
 
 ---
 

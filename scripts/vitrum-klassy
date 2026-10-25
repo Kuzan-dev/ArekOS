@@ -26,7 +26,9 @@ K --group "Windeco Exception 0" --key ExceptionWindowPropertyPattern vitrum
 K --group "Windeco Exception 0" --key HideTitleBar Always
 # Estilo de apps: menús translúcidos (KWin los desenfoca)
 K --group Style --key MenuOpacity 88
-kwriteconfig6 --file kwinrc --group org.kde.kdecoration2 --key library org.vitrum.decoracion
+# si el guardián los ha desactivado (compilados para otra versión de kdecoration/Qt) se mantiene Breeze
+incompatible=false; [ -f ~/.local/share/vitrum/plugins-incompatibles ] && incompatible=true
+$incompatible || kwriteconfig6 --file kwinrc --group org.kde.kdecoration2 --key library org.vitrum.decoracion
 kwriteconfig6 --file kwinrc --group org.kde.kdecoration2 --key theme Vitrum
 kwriteconfig6 --file kwinrc --group org.kde.kdecoration2 --key ButtonsOnLeft XIA
 kwriteconfig6 --file kwinrc --group org.kde.kdecoration2 --key ButtonsOnRight ""
@@ -44,7 +46,7 @@ kwriteconfig6 --file darklyrc --group Common --key ScrollBarTransient true
 kwriteconfig6 --file kwinrc --group Effect-blur --key BlurStrength 10
 kwriteconfig6 --file kwinrc --group Effect-blur --key NoiseStrength 0
 D --key WidgetDrawShadow false
-kwriteconfig6 --file kdeglobals --group KDE --key widgetStyle Darkly
+$incompatible || kwriteconfig6 --file kdeglobals --group KDE --key widgetStyle Darkly
 kwriteconfig6 --file kdeglobals --group KDE --key ShowIconsInMenuItems false
 # Tema global: solo se usa para las pantallas de cierre de sesión (diálogo al estilo macOS)
 kwriteconfig6 --file kdeglobals --group KDE --key LookAndFeelPackage org.vitrum.claro

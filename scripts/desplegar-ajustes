@@ -65,7 +65,7 @@ TARGET_HOME="$(getent passwd "$TARGET_USER" | cut -d: -f6)"
 
 echo "==> Desplegando ArekOS para el usuario: $TARGET_USER ($TARGET_HOME)"
 if [ "$TARGET_USER" != "$USER" ]; then
-    [ "$(id -u)" = 0 ] || sudo -v
+    [ "$(id -u)" = 0 ] || sudo -n -u "$TARGET_USER" true 2>/dev/null || sudo -v
 fi
 
 # Función para ejecutar comandos en el contexto del usuario destino
@@ -92,10 +92,11 @@ sincronizar_src() {
 # 1. Sincronizar ajustes y scripts
 sincronizar_src "ajustes"
 sincronizar_src "scripts"
+sincronizar_src "binarios"
 
 ejecutar_en_destino '
 set -e
-mkdir -p ~/.local/share/vitrum-ajustes ~/.local/bin
+mkdir -p ~/.local/share/vitrum-ajustes ~/.local/bin ~/.local/share/vitrum
 rm -rf ~/.local/share/vitrum-ajustes/qml && cp -r ~/.cache/vitrum-src/ajustes/qml ~/.local/share/vitrum-ajustes/
 cp ~/.cache/vitrum-src/scripts/vitrum-modo \
    ~/.cache/vitrum-src/scripts/vitrum-plasma-set \
@@ -105,7 +106,13 @@ cp ~/.cache/vitrum-src/scripts/vitrum-modo \
    ~/.cache/vitrum-src/scripts/vitrum-bandeja \
    ~/.cache/vitrum-src/scripts/vitrum-brillo \
    ~/.cache/vitrum-src/scripts/vitrum-raton \
-   ~/.cache/vitrum-src/scripts/vitrum-pantalla-cambio ~/.local/bin/
+   ~/.cache/vitrum-src/scripts/vitrum-pantalla-cambio \
+   ~/.cache/vitrum-src/scripts/vitrum-steam \
+   ~/.cache/vitrum-src/scripts/vitrum-zen \
+   ~/.cache/vitrum-src/scripts/crunchyroll \
+   ~/.cache/vitrum-src/scripts/crunchyroll-gamepad-bridge.py ~/.local/bin/
+chmod +x ~/.local/bin/vitrum-* ~/.local/bin/crunchyroll*
+[ -f ~/.cache/vitrum-src/binarios/plugins-compilados ] && cp ~/.cache/vitrum-src/binarios/plugins-compilados ~/.local/share/vitrum/plugins-compilados
 '
 
 # 2. Recompilación de vitrum-ajustes si se solicita
@@ -141,21 +148,44 @@ rm -rf ~/.local/share/plasma/plasmoids/org.vitrum.menuapple
 cp -r ~/.cache/vitrum-src/menu-apple ~/.local/share/plasma/plasmoids/org.vitrum.menuapple
 '
 
-# 5. Iconos propios
+# 5. Iconos propios y de aplicaciones
 sincronizar_src "iconos"
+sincronizar_src "iconos-apps"
 ejecutar_en_destino '
 mkdir -p ~/.local/share/icons/hicolor/scalable/apps
 cp ~/.cache/vitrum-src/iconos/*.svg ~/.local/share/icons/hicolor/scalable/apps/
+cp ~/.cache/vitrum-src/iconos-apps/*.svg ~/.local/share/icons/hicolor/scalable/apps/
+for t in WhiteSur WhiteSur-dark; do
+    [ -d ~/.local/share/icons/$t/apps/scalable ] && cp ~/.cache/vitrum-src/iconos/*.svg ~/.local/share/icons/$t/apps/scalable/
+    [ -d ~/.local/share/icons/$t/apps/scalable ] && cp ~/.cache/vitrum-src/iconos-apps/*.svg ~/.local/share/icons/$t/apps/scalable/
+done
 '
 
-# 6. Integración y servicios (Vista rápida, Dock, Launchpad, Spotlight)
+# 5.1 Herramientas propias: vitrum-icon-patcher y vitrum-window-patcher
+sincronizar_src "herramientas"
+ejecutar_en_destino '
+mkdir -p ~/.local/share/vitrum/herramientas ~/.local/bin
+cp -r ~/.cache/vitrum-src/herramientas/* ~/.local/share/vitrum/herramientas/
+ln -sf ~/.local/share/vitrum/herramientas/vitrum-icon-patcher/vitrum-icon-patcher ~/.local/bin/vitrum-icon-patcher
+ln -sf ~/.local/share/vitrum/herramientas/vitrum-window-patcher/vitrum-window-patcher ~/.local/bin/vitrum-window-patcher
+chmod +x ~/.local/share/vitrum/herramientas/vitrum-icon-patcher/vitrum-icon-patcher \
+         ~/.local/share/vitrum/herramientas/vitrum-window-patcher/vitrum-window-patcher
+'
+
+# 6. Integración y servicios (Vista rápida, Dock, Launchpad, Spotlight, Patcher, Crunchyroll)
 sincronizar_src "integracion"
-ejecutar_en_destino "
+ejecutar_en_destino '
 set -e
-mkdir -p ~/.local/share/kio/servicemenus ~/.local/share/applications ~/.config/autostart ~/.config/systemd/user/plasma-workspace.target.wants ~/.local/share/dbus-1/services
+mkdir -p ~/.local/share/kio/servicemenus ~/.local/share/applications ~/.config/autostart ~/.config/systemd/user/plasma-workspace.target.wants ~/.local/share/dbus-1/services ~/.config/plasma-workspace/env
 cp ~/.cache/vitrum-src/integracion/vitrum-vista-rapida.desktop ~/.cache/vitrum-src/integracion/vitrum-escritorio.desktop ~/.local/share/kio/servicemenus/
 chmod +x ~/.local/share/kio/servicemenus/vitrum-*.desktop
-cp ~/.cache/vitrum-src/integracion/org.vitrum.vistarapida.desktop ~/.cache/vitrum-src/integracion/org.vitrum.spotlight-atajo.desktop ~/.cache/vitrum-src/integracion/org.vitrum.launchpad.desktop ~/.local/share/applications/
+cp ~/.cache/vitrum-src/integracion/org.vitrum.vistarapida.desktop \
+   ~/.cache/vitrum-src/integracion/org.vitrum.spotlight-atajo.desktop \
+   ~/.cache/vitrum-src/integracion/org.vitrum.launchpad.desktop \
+   ~/.cache/vitrum-src/integracion/vitrum-icon-patcher.desktop \
+   ~/.cache/vitrum-src/integracion/vitrum-window-patcher.desktop \
+   ~/.cache/vitrum-src/integracion/crunchyroll.desktop ~/.local/share/applications/
+cp ~/.cache/vitrum-src/integracion/vitrum-plugins-guardian.sh ~/.config/plasma-workspace/env/
 
 # dock/Launchpad/Spotlight: servicio de usuario
 rm -f ~/.config/autostart/vitrum-shell.desktop
@@ -175,12 +205,12 @@ EOT
 ln -sf ../vitrum-shell.service ~/.config/systemd/user/plasma-workspace.target.wants/vitrum-shell.service
 
 # Activación por D-Bus usando la ruta del usuario destino
-printf '[D-BUS Service]\nName=org.vitrum.Shell\nExec=%s/.local/bin/vitrum-ajustes --shell\nSystemdService=vitrum-shell.service\n' \"$TARGET_HOME\" > ~/.local/share/dbus-1/services/org.vitrum.Shell.service
+printf "[D-BUS Service]\nName=org.vitrum.Shell\nExec=$HOME/.local/bin/vitrum-ajustes --shell\nSystemdService=vitrum-shell.service\n" > ~/.local/share/dbus-1/services/org.vitrum.Shell.service
 
 # Ocultar icono de puente de vídeo XWayland
-printf '[Desktop Entry]\nHidden=true\n' > ~/.config/autostart/org.kde.xwaylandvideobridge.desktop
+printf "[Desktop Entry]\nHidden=true\n" > ~/.config/autostart/org.kde.xwaylandvideobridge.desktop
 cp ~/.cache/vitrum-src/scripts/vitrum-vista-rapida ~/.local/bin/
-"
+'
 
 # 7. Spotlight y temporizador de modo automático
 sincronizar_src "spotlight"

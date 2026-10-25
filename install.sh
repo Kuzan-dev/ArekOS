@@ -31,6 +31,7 @@ COMPILAR=false
 APLICAR_EN_VIVO=true
 LOGIN=false
 WAYWALLEN=false
+AMD=false
 # primera instalación: el fondo de pantalla Vitrum solo se pone entonces (al reinstalar se respeta el del usuario)
 PRIMERA=true
 [ -f "$HOME/.config/vitrumrc" ] && PRIMERA=false
@@ -41,6 +42,7 @@ for arg in "$@"; do
         --sin-reiniciar-plasma) APLICAR_EN_VIVO=false ;;
         --login) LOGIN=true ;;
         --waywallen) WAYWALLEN=true ;;
+        --amd|--AMD) AMD=true ;;
     esac
 done
 
@@ -53,6 +55,7 @@ mkdir -p \
     "$HOME/.local/lib64/qt6/plugins/kwin/effects/plugins" \
     "$HOME/.local/share/vitrum-ajustes" \
     "$HOME/.local/share/vitrum" \
+    "$HOME/.local/share/vitrum/herramientas" \
     "$HOME/.local/share/plasma/plasmoids" \
     "$HOME/.local/share/icons/hicolor/scalable/apps" \
     "$HOME/.local/share/kio/servicemenus" \
@@ -72,7 +75,7 @@ cp -r "$REPO_DIR/ajustes" "$REPO_DIR/centro-control" "$REPO_DIR/decoracion" \
       "$REPO_DIR/iconos" "$REPO_DIR/integracion" "$REPO_DIR/kwin-desenfoque" \
       "$REPO_DIR/menu-apple" "$REPO_DIR/nombre-app" "$REPO_DIR/scripts" \
       "$REPO_DIR/spotlight" "$REPO_DIR/tema-plasma" "$REPO_DIR/temas" \
-      "$REPO_DIR/darkly" "$REPO_DIR/bloqueo" "$HOME/.cache/vitrum-src/"
+      "$REPO_DIR/darkly" "$REPO_DIR/bloqueo" "$REPO_DIR/herramientas" "$HOME/.cache/vitrum-src/"
 
 echo "==> [2/7] Descomprimiendo iconos WhiteSur, fuentes Inter/JetBrains Mono, esquemas y temas..."
 zstd -dc "$REPO_DIR/paquetes/recursos.tar.zst" | tar -C "$HOME/.local/share" -xf -
@@ -145,6 +148,7 @@ instalar_bin "$BINS_DIR/darklystyleconfig.so" "$HOME/.local/lib64/qt6/plugins/ks
 instalar_bin "$BINS_DIR/org.vitrum.decoracion.so" "$HOME/.local/lib64/qt6/plugins/org.kde.kdecoration3/org.vitrum.decoracion.so"
 instalar_bin "$BINS_DIR/vitrumblur.so" "$HOME/.local/lib64/qt6/plugins/kwin/effects/plugins/vitrumblur.so"
 [ -f "$BINS_DIR/kwin-version" ] && cp "$BINS_DIR/kwin-version" "$HOME/.local/share/vitrum/desenfoque-kwin"
+[ -f "$BINS_DIR/plugins-compilados" ] && cp "$BINS_DIR/plugins-compilados" "$HOME/.local/share/vitrum/plugins-compilados"
 
 # Si la versión de KWin del sistema es distinta a la del binario precompilado, recompilar vitrumblur
 if [ -f "$HOME/.local/share/vitrum/desenfoque-kwin" ] && [ "$(cat "$HOME/.local/share/vitrum/desenfoque-kwin")" != "$KWIN_VER" ]; then
@@ -152,16 +156,28 @@ if [ -f "$HOME/.local/share/vitrum/desenfoque-kwin" ] && [ "$(cat "$HOME/.local/
     "$REPO_DIR/scripts/vitrum-desenfoque-construir" --forzar || true
 fi
 
-echo "==> [4/7] Instalando QML, plasmoides, iconos y scripts..."
+echo "==> [4/7] Instalando QML, plasmoides, iconos, herramientas y scripts..."
 rm -rf "$HOME/.local/share/vitrum-ajustes/qml"
 cp -r "$REPO_DIR/ajustes/qml" "$HOME/.local/share/vitrum-ajustes/"
 
 for s in vitrum-modo vitrum-plasma-set vitrum-disposicion vitrum-esquemas vitrum-klassy \
          vitrum-bandeja vitrum-brillo vitrum-raton vitrum-pantalla-cambio \
-         vitrum-cc-estado vitrum-cc-detalle vitrum-bt vitrum-vista-rapida vitrum-desenfoque-construir vitrum-zen vitrum-steam vitrum-waywallen; do
+         vitrum-cc-estado vitrum-cc-detalle vitrum-bt vitrum-vista-rapida vitrum-desenfoque-construir vitrum-zen vitrum-steam vitrum-waywallen \
+         crunchyroll crunchyroll-gamepad-bridge.py; do
+    [ -f "$REPO_DIR/scripts/$s" ] || continue
     cp "$REPO_DIR/scripts/$s" "$HOME/.local/bin/$s"
     chmod +x "$HOME/.local/bin/$s"
 done
+
+# Herramientas de stock: vitrum-icon-patcher y vitrum-window-patcher
+if [ -d "$REPO_DIR/herramientas" ]; then
+    mkdir -p "$HOME/.local/share/vitrum/herramientas"
+    cp -r "$REPO_DIR/herramientas/"* "$HOME/.local/share/vitrum/herramientas/"
+    ln -sf "$HOME/.local/share/vitrum/herramientas/vitrum-icon-patcher/vitrum-icon-patcher" "$HOME/.local/bin/vitrum-icon-patcher"
+    ln -sf "$HOME/.local/share/vitrum/herramientas/vitrum-window-patcher/vitrum-window-patcher" "$HOME/.local/bin/vitrum-window-patcher"
+    chmod +x "$HOME/.local/share/vitrum/herramientas/vitrum-icon-patcher/vitrum-icon-patcher" \
+             "$HOME/.local/share/vitrum/herramientas/vitrum-window-patcher/vitrum-window-patcher"
+fi
 
 for p_src_dst in "centro-control:org.vitrum.centrocontrol" \
                  "menu-apple:org.vitrum.menuapple" \
@@ -174,8 +190,10 @@ for p_src_dst in "centro-control:org.vitrum.centrocontrol" \
 done
 
 cp "$REPO_DIR/iconos/"*.svg "$HOME/.local/share/icons/hicolor/scalable/apps/"
-# iconos de apps web (Disney+, HBO Max) con la forma y la sombra de WhiteSur
+cp "$REPO_DIR/iconos-apps/"*.svg "$HOME/.local/share/icons/hicolor/scalable/apps/"
+# iconos de apps web y herramientas con la forma y la sombra de WhiteSur
 for t in WhiteSur WhiteSur-dark; do
+    [ -d "$HOME/.local/share/icons/$t/apps/scalable" ] && cp "$REPO_DIR/iconos/"*.svg "$HOME/.local/share/icons/$t/apps/scalable/"
     [ -d "$HOME/.local/share/icons/$t/apps/scalable" ] && cp "$REPO_DIR/iconos-apps/"*.svg "$HOME/.local/share/icons/$t/apps/scalable/"
 done
 
@@ -191,6 +209,9 @@ chmod +x "$HOME/.local/share/kio/servicemenus/vitrum-"*.desktop
 cp "$REPO_DIR/integracion/org.vitrum.vistarapida.desktop" \
    "$REPO_DIR/integracion/org.vitrum.spotlight-atajo.desktop" \
    "$REPO_DIR/integracion/org.vitrum.launchpad.desktop" \
+   "$REPO_DIR/integracion/vitrum-icon-patcher.desktop" \
+   "$REPO_DIR/integracion/vitrum-window-patcher.desktop" \
+   "$REPO_DIR/integracion/crunchyroll.desktop" \
    "$HOME/.local/share/applications/"
 
 cat > "$HOME/.local/share/applications/org.vitrum.ajustes.desktop" <<EOF
@@ -215,16 +236,22 @@ EOF
 
 cp "$REPO_DIR/integracion/vitrum-desenfoque-guardian.sh" "$HOME/.config/plasma-workspace/env/"
 cp "$REPO_DIR/integracion/vitrum-atajos-guardian.sh" "$HOME/.config/plasma-workspace/env/"
+cp "$REPO_DIR/integracion/vitrum-plugins-guardian.sh" "$HOME/.config/plasma-workspace/env/"
 
 cat > "$HOME/.config/environment.d/60-vitrum-plugins.conf" <<EOF
 QT_PLUGIN_PATH=$HOME/.local/opt/kvantum/plugins:$HOME/.local/lib64/qt6/plugins
 LD_LIBRARY_PATH=$HOME/.local/lib64
 EOF
 
-cat > "$HOME/.config/environment.d/90-kwin-color-pipeline.conf" <<'EOF'
-# Evita el crash de KWin 6.6.4 en DrmAbstractColorOp::matchPipeline (NVIDIA)
+# Color pipeline: en NVIDIA evita crash en DrmAbstractColorOp::matchPipeline; en AMD/Intel se deja activo
+if [ "$AMD" = true ] || { [ ! -d /proc/driver/nvidia ] && ! lsmod 2>/dev/null | grep -q '^nvidia'; }; then
+    rm -f "$HOME/.config/environment.d/90-kwin-color-pipeline.conf"
+else
+    cat > "$HOME/.config/environment.d/90-kwin-color-pipeline.conf" <<'EOF'
+# Evita el crash de KWin en DrmAbstractColorOp::matchPipeline (NVIDIA)
 KWIN_DRM_USE_COLOR_PIPELINE=0
 EOF
+fi
 
 # Servicios systemd de usuario (Dock/Shell, modo automático y auto-recompilación de vitrumblur)
 rm -f "$HOME/.config/autostart/vitrum-shell.desktop"

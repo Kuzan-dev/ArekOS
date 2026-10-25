@@ -120,8 +120,9 @@ Window {
     }
     Item {
         anchors.fill: parent
-        opacity: lp.shown ? 1 : 0
-        scale: lp.shown ? 1 : 1.08
+        // con una carpeta abierta la cuadrícula se desvanece y solo queda el panel, como en macOS
+        opacity: lp.shown && !lp.folder ? 1 : 0
+        scale: lp.shown ? (lp.folder ? 0.96 : 1) : 1.08
         Behavior on opacity { NumberAnimation { duration: 170 } }
         Behavior on scale { NumberAnimation { duration: 200; easing.type: Easing.OutCubic } }
 
@@ -281,6 +282,7 @@ Window {
         Behavior on opacity { NumberAnimation { duration: 160 } }
         readonly property var fapps: lp.folder ? lp.folder.apps : []
         readonly property int fcols: Math.min(5, Math.max(3, fapps.length))
+        Rectangle { anchors.fill: parent; color: Qt.rgba(0, 0, 0, 0.22) }
         MouseArea { anchors.fill: parent; onClicked: lp.folder = null; onWheel: {} }
         Text {
             anchors.horizontalCenter: parent.horizontalCenter

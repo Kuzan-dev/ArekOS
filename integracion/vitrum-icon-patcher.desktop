@@ -1,0 +1,12 @@
+[Desktop Entry]
+Name=Vitrum Icon Patcher
+GenericName=Launchpad Squircle Studio
+Comment=Convierte y adapta iconos de aplicaciones al formato squircle de macOS y Launchpad
+Exec=vitrum-icon-patcher
+Icon=vitrum-icon-patcher
+Terminal=false
+Type=Application
+Categories=Utility;Graphics;Settings;
+StartupNotify=true
+StartupWMClass=org.vitrum.iconpatcher
+Keywords=icons;patcher;squircle;launchpad;macos;whitesur;vitrum;

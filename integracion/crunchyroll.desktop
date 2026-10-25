@@ -1,0 +1,30 @@
+[Desktop Entry]
+Version=1.0
+Type=Application
+Name=Crunchyroll
+GenericName=Plataforma de Streaming de Anime
+Comment=El mayor catálogo de anime del mundo, simulcasts, películas y más
+Exec=crunchyroll %U
+Icon=crunchyroll
+Terminal=false
+StartupWMClass=chrome-www.crunchyroll.com__-Default
+StartupNotify=true
+Categories=AudioVideo;Video;Player;TV;Network;
+Keywords=crunchyroll;anime;manga;streaming;series;peliculas;movies;japan;japon;simulcast;xbox;controller;
+Actions=Watchlist;Search;Popular;Simulcasts;
+
+[Desktop Action Watchlist]
+Name=Mi Lista
+Exec=crunchyroll --app=https://www.crunchyroll.com/watchlist
+
+[Desktop Action Search]
+Name=Buscar
+Exec=crunchyroll --app=https://www.crunchyroll.com/search
+
+[Desktop Action Popular]
+Name=Populares
+Exec=crunchyroll --app=https://www.crunchyroll.com/videos/popular
+
+[Desktop Action Simulcasts]
+Name=Simulcasts
+Exec=crunchyroll --app=https://www.crunchyroll.com/simulcasts

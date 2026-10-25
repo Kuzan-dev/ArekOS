@@ -1,0 +1,8 @@
+#!/usr/bin/env bash
+# Crunchyroll WebApp Launcher
+systemctl --user start streaming-gamepad.service 2>/dev/null || true
+
+exec flatpak run com.google.Chrome \
+  --app=https://www.crunchyroll.com \
+  --enable-features=VaapiVideoDecodeLinuxGL,MediaSessionService \
+  "$@"

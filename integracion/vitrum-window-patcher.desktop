@@ -1,0 +1,12 @@
+[Desktop Entry]
+Name=Vitrum Window Patcher
+GenericName=Gestor de Semáforos y Decoraciones
+Comment=Aplica semáforos de macOS Monterey y decoraciones de ventana en aplicaciones (Zen, Steam, Chrome, Electron)
+Exec=vitrum-window-patcher
+Icon=vitrum-window-patcher
+Terminal=false
+Type=Application
+Categories=Utility;Settings;System;
+StartupNotify=true
+StartupWMClass=org.vitrum.windowpatcher
+Keywords=traffic-lights;semaforos;macos;vitrum;kwin;steam;zen;chrome;window;decorations;

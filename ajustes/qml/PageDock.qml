@@ -109,6 +109,17 @@ Page {
     }
     Note { text: "Para añadir o quitar apps del Dock, haz clic derecho sobre su icono." }
 
+    SectionHeader { text: "Launchpad" }
+    Card {
+        RowItem {
+            title: "Agrupar las apps en carpetas"
+            subtitle: "Por categoría (Internet, Oficina, Juegos…); las apps del Dock quedan sueltas"
+            MacSwitch {
+                checked: Sys.readConf("vitrumrc", ["Launchpad"], "Carpetas", "true") !== "false"
+                onToggled: (v) => Sys.writeConf("vitrumrc", ["Launchpad"], "Carpetas", v ? "true" : "false")
+            }
+        }
+    }
     SectionHeader { text: "Ventanas" }
     Card {
         RowItem {

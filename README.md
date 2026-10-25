@@ -78,6 +78,22 @@ git clone https://github.com/Kuzan-dev/ArekOS.git ~/Documentos/ArekOS && bash ~/
 
 ---
 
+## 🛡️ Compatibility & Stability
+
+Tested on **Fedora 44 with an AMD GPU** (Radeon RX 5700, `amdgpu`), KWin/kdecoration **6.7.5** and Qt **6.11**. The binaries in `binarios/` are built for those versions.
+
+- **AMD / Intel GPUs:** the `KWIN_DRM_USE_COLOR_PIPELINE=0` workaround (for a KWin 6.6.4 crash on NVIDIA) is only applied when NVIDIA is detected; on AMD/Intel the color pipeline stays enabled (HDR and hardware color management).
+- **Fedora updates (most important):** the window decoration (`org.vitrum.decoracion`) and Darkly are built for a specific kdecoration and Qt version. The `vitrum-plugins-guardian.sh` guardian checks this at every login: if Fedora updates them to another version (e.g. 6.7 → 6.8) it switches to Breeze so KWin does not crash, and restores Vitrum's once they match again. After every major KDE update run `bash install.sh --compilar` and log out.
+- **Custom blur (`vitrumblur`):** its patch (`kwin-desenfoque/herramientas/parchear.py`) **does not support KWin 6.7 yet** (KWin replaced `QRectF` with `RectF`, removed the `_core` shaders and changed `blur.h`), so KDE's stock blur is used, which is stable. The rebuild service tries **once per KWin version** and, if it fails, does not retry at every login (it retries when KWin changes, with `vitrum-desenfoque-construir --forzar` or with `install.sh --compilar`).
+- **Log out after installing:** KWin only loads the decoration and effects from `~/.local/lib64` when it starts with the environment set by the installer. Until you log in again, windows keep the stock decoration.
+- **Chromium browsers (Brave, Chrome, Vivaldi) and some Electron apps** draw their own title bar and do not show the traffic lights. In Brave: `brave://settings/appearance` → "Use system title bar and borders".
+- **`LD_LIBRARY_PATH=$HOME/.local/lib64`** applies to the whole session: do not put other libraries in that folder.
+- **KRunner is disabled** (Alt+Space and Super+Space open Spotlight).
+- **There is no uninstaller:** only `plasma-org.kde.plasma.desktop-appletsrc` and `kglobalshortcutsrc` are backed up (`*.antes-arekos`). Before installing on your main user, back up `~/.config` and `~/.local/share`, and try it on a test user first.
+- **Do not use `--login` with a different Plasma Login version:** it modifies `/etc` and skips itself when the version does not match.
+
+---
+
 ## ⌨️ Keyboard Shortcuts
 
 Standard Linux and PC shortcuts (`Ctrl+C`, `Ctrl+V`, `Alt+Tab`, etc.) are left completely intact, mapping fast desktop actions to the `Super` (`Meta`) key:

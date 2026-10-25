@@ -127,6 +127,7 @@ if [ "$COMPILAR" = true ] || [ ! -f "$BINS_DIR/vitrum-ajustes" ]; then
         cmake --build /tmp/b-kd -j\$(nproc) >/dev/null
         find /tmp/b-kd -name 'vitrumblur.so' -exec cp {} /out/ \;
         rpm -q --qf '%{VERSION}-%{RELEASE}' kwin-devel > /out/kwin-version
+        echo kdecoration \$(rpm -q --qf '%{VERSION}' kdecoration-devel | cut -d. -f1,2) qt \$(rpm -q --qf '%{VERSION}' qt6-qtbase-devel | cut -d. -f1,2) > /out/plugins-compilados
     " 2>&1 | grep -v level=warn || true
     BINS_DIR="$W/out"
 fi
@@ -145,6 +146,10 @@ instalar_bin "$BINS_DIR/darklystyleconfig.so" "$HOME/.local/lib64/qt6/plugins/ks
 instalar_bin "$BINS_DIR/org.vitrum.decoracion.so" "$HOME/.local/lib64/qt6/plugins/org.kde.kdecoration3/org.vitrum.decoracion.so"
 instalar_bin "$BINS_DIR/vitrumblur.so" "$HOME/.local/lib64/qt6/plugins/kwin/effects/plugins/vitrumblur.so"
 [ -f "$BINS_DIR/kwin-version" ] && cp "$BINS_DIR/kwin-version" "$HOME/.local/share/vitrum/desenfoque-kwin"
+# versiones de kdecoration/Qt para las que están compilados la decoración y Darkly (ver vitrum-plugins-guardian.sh)
+[ -f "$BINS_DIR/plugins-compilados" ] && cp "$BINS_DIR/plugins-compilados" "$HOME/.local/share/vitrum/plugins-compilados"
+# tras recompilar, el desenfoque vuelve a intentarse aunque haya fallado antes para esta KWin
+[ "$COMPILAR" = true ] && rm -f "$HOME/.local/share/vitrum/desenfoque-fallido"
 
 # Si la versión de KWin del sistema es distinta a la del binario precompilado, recompilar vitrumblur
 if [ -f "$HOME/.local/share/vitrum/desenfoque-kwin" ] && [ "$(cat "$HOME/.local/share/vitrum/desenfoque-kwin")" != "$KWIN_VER" ]; then
@@ -215,6 +220,7 @@ EOF
 
 cp "$REPO_DIR/integracion/vitrum-desenfoque-guardian.sh" "$HOME/.config/plasma-workspace/env/"
 cp "$REPO_DIR/integracion/vitrum-atajos-guardian.sh" "$HOME/.config/plasma-workspace/env/"
+cp "$REPO_DIR/integracion/vitrum-plugins-guardian.sh" "$HOME/.config/plasma-workspace/env/"
 
 cat > "$HOME/.config/environment.d/60-vitrum-plugins.conf" <<EOF
 QT_PLUGIN_PATH=$HOME/.local/opt/kvantum/plugins:$HOME/.local/lib64/qt6/plugins
@@ -319,6 +325,7 @@ fi
 
 # Ejecutar el guardián de desenfoque y la configuración de estilo/decoración
 . "$HOME/.config/plasma-workspace/env/vitrum-desenfoque-guardian.sh"
+. "$HOME/.config/plasma-workspace/env/vitrum-plugins-guardian.sh"
 "$HOME/.local/bin/vitrum-klassy"
 # Zen Browser (si está instalado): mismas esquinas de 10 px que el resto de ventanas
 "$HOME/.local/bin/vitrum-zen" "$REPO_DIR/integracion" || true

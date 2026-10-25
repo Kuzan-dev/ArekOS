@@ -7,18 +7,29 @@ set -euo pipefail
 v=$(rpm -q --qf '%{VERSION}' kwin); vr=$(rpm -q --qf '%{VERSION}-%{RELEASE}' kwin)
 marca=~/.local/share/vitrum/desenfoque-kwin
 [ "$(cat "$marca" 2>/dev/null)" = "$vr" ] && [ "${1:-}" != --forzar ] && exit 0
+# si ya falló para esta versión de KWin (el parche no aplica) no se reintenta en cada inicio de sesión;
+# se reintenta al cambiar KWin, con --forzar o tras «install.sh --compilar»
+fallo=~/.local/share/vitrum/desenfoque-fallido
+[ "$(cat "$fallo" 2>/dev/null)" = "$vr" ] && [ "${1:-}" != --forzar ] && exit 0
+fallar() {
+    mkdir -p "$(dirname "$fallo")"; echo "$vr" > "$fallo"
+    logger -t vitrum "el desenfoque de Vitrum no se pudo adaptar a KWin $vr: se usa el de KDE"
+    exit 1
+}
 base=~/.cache/vitrum-src; w=$base/desenfoque-auto
 rm -rf "$w"; mkdir -p "$w"
 git clone -q --depth 1 --branch "v$v" --filter=blob:none --sparse https://invent.kde.org/plasma/kwin.git "$w/kwin"
 git -C "$w/kwin" sparse-checkout set src/plugins/blur
-python3 "$base/kwin-desenfoque/herramientas/parchear.py" "$w/kwin/src/plugins/blur" "$w/src"
+python3 "$base/kwin-desenfoque/herramientas/parchear.py" "$w/kwin/src/plugins/blur" "$w/src" || fallar
 mkdir -p "$w/out"
 export XDG_RUNTIME_DIR=${XDG_RUNTIME_DIR:-/run/user/$(id -u)}
 podman run --rm -v "$w/src:/src:Z,ro" -v "$w/out:/out:Z" registry.fedoraproject.org/fedora:"$(rpm -E %fedora)" bash -c "
 dnf -y -q install --setopt=install_weak_deps=False cmake gcc-c++ extra-cmake-modules kwin-devel-$vr qt6-qtbase-devel qt6-qtbase-private-devel kf6-kconfig-devel kf6-kconfigwidgets-devel kf6-kcoreaddons-devel kdecoration-devel libepoxy-devel wayland-devel libxcb-devel libdrm-devel mesa-libgbm-devel libxkbcommon-devel pipewire-devel lcms2-devel libdisplay-info-devel >/dev/null
 cmake -S /src -B /tmp/b -DCMAKE_BUILD_TYPE=Release >/dev/null && cmake --build /tmp/b -j\$(nproc) >/dev/null
-find /tmp/b -name vitrumblur.so -exec cp {} /out/ \;"
+find /tmp/b -name vitrumblur.so -exec cp {} /out/ \;" || fallar
+[ -f "$w/out/vitrumblur.so" ] || fallar
 d=~/.local/lib64/qt6/plugins/kwin/effects/plugins; mkdir -p "$d" "$(dirname "$marca")"
 cp "$w/out/vitrumblur.so" "$d/vitrumblur.so.nuevo" && mv -f "$d/vitrumblur.so.nuevo" "$d/vitrumblur.so"
 echo "$vr" > "$marca"
+rm -f "$fallo"
 logger -t vitrum "desenfoque de Vitrum recompilado para KWin $vr (activo en el próximo inicio de sesión)"

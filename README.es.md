@@ -78,6 +78,22 @@ git clone https://github.com/Kuzan-dev/ArekOS.git ~/Documentos/ArekOS && bash ~/
 
 ---
 
+## 🛡️ Compatibilidad y estabilidad
+
+Probado en **Fedora 44 con GPU AMD** (Radeon RX 5700, `amdgpu`), KWin/kdecoration **6.7.5** y Qt **6.11**. Los binarios de `binarios/` están compilados para esas versiones.
+
+- **GPU AMD / Intel:** el ajuste `KWIN_DRM_USE_COLOR_PIPELINE=0` (evita un crash de KWin 6.6.4 con NVIDIA) solo se aplica si se detecta NVIDIA; en AMD/Intel el color pipeline queda activo (HDR y gestión de color por hardware).
+- **Actualizaciones de Fedora (lo más importante):** la decoración de ventanas (`org.vitrum.decoracion`) y Darkly están compilados para una versión concreta de kdecoration y Qt. El guardián `vitrum-plugins-guardian.sh` lo comprueba en cada inicio de sesión: si Fedora los actualiza a otra versión (p. ej. 6.7 → 6.8), pasa a Breeze para que KWin no se caiga, y restaura los de Vitrum cuando vuelven a coincidir. Tras cada actualización grande de KDE conviene ejecutar `bash install.sh --compilar` y cerrar sesión.
+- **Desenfoque propio (`vitrumblur`):** su parche (`kwin-desenfoque/herramientas/parchear.py`) **aún no soporta KWin 6.7** (KWin cambió `QRectF` por `RectF`, quitó los shaders `_core` y modificó `blur.h`), así que se usa el desenfoque estándar de KDE, que es estable. El servicio de recompilación lo intenta **una sola vez por versión de KWin** y, si falla, no lo reintenta en cada inicio de sesión (se reintenta al cambiar KWin, con `vitrum-desenfoque-construir --forzar` o con `install.sh --compilar`).
+- **Cerrar sesión tras instalar:** KWin solo carga la decoración y los efectos de `~/.local/lib64` si arranca con el entorno que deja el instalador. Sin volver a entrar, las ventanas siguen con la decoración estándar.
+- **Navegadores Chromium (Brave, Chrome, Vivaldi) y algunas apps Electron** dibujan su propia barra de título y no muestran los semáforos. En Brave: `brave://settings/appearance` → «Usar barra de título y bordes del sistema».
+- **`LD_LIBRARY_PATH=$HOME/.local/lib64`** se aplica a toda la sesión: no pongas otras bibliotecas en esa carpeta.
+- **KRunner queda desactivado** (Alt+Espacio y Super+Espacio abren Spotlight).
+- **No hay desinstalador:** solo se guardan copias de `plasma-org.kde.plasma.desktop-appletsrc` y `kglobalshortcutsrc` (`*.antes-arekos`). Antes de instalarlo en tu usuario principal, respalda `~/.config` y `~/.local/share`, y pruébalo primero en un usuario de pruebas.
+- **No uses `--login` en otra versión de Plasma Login:** toca `/etc` y se omite sola si la versión no coincide.
+
+---
+
 ## ⌨️ Atajos de Teclado
 
 Se conservan intactos los atajos estándar de Linux y PC (`Ctrl+C`, `Ctrl+V`, `Alt+Tab`, etc.), asignando las experiencias rápidas a la tecla `Super` (`Meta`):

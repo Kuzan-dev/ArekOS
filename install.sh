@@ -101,7 +101,7 @@ if [ "$COMPILAR" = true ] || [ ! -f "$BINS_DIR/vitrum-ajustes" ]; then
         -v "$W/out:/out:Z" \
         "registry.fedoraproject.org/fedora:$FEDORA_VER" bash -c "
         set -e
-        dnf -y -q --disablerepo=updates install --setopt=install_weak_deps=False \
+        dnf -y -q install --setopt=install_weak_deps=False \
             cmake gcc-c++ extra-cmake-modules kwin-devel qt6-qtbase-devel qt6-qtbase-private-devel \
             qt6-qtdeclarative-devel kf6-kwindowsystem-devel kf6-kconfig-devel kf6-kconfigwidgets-devel \
             kf6-kservice-devel kf6-kcmutils-devel kf6-kcoreaddons-devel kf6-kcolorscheme-devel \
@@ -221,10 +221,14 @@ QT_PLUGIN_PATH=$HOME/.local/opt/kvantum/plugins:$HOME/.local/lib64/qt6/plugins
 LD_LIBRARY_PATH=$HOME/.local/lib64
 EOF
 
-cat > "$HOME/.config/environment.d/90-kwin-color-pipeline.conf" <<'EOF'
-# Evita el crash de KWin 6.6.4 en DrmAbstractColorOp::matchPipeline (NVIDIA)
+# Evita el crash de KWin 6.6.4 en DrmAbstractColorOp::matchPipeline (solo NVIDIA; en AMD/Intel se deja activo)
+if [ -d /proc/driver/nvidia ] || lsmod 2>/dev/null | grep -q '^nvidia'; then
+    cat > "$HOME/.config/environment.d/90-kwin-color-pipeline.conf" <<'EOF'
 KWIN_DRM_USE_COLOR_PIPELINE=0
 EOF
+else
+    rm -f "$HOME/.config/environment.d/90-kwin-color-pipeline.conf"
+fi
 
 # Servicios systemd de usuario (Dock/Shell, modo automático y auto-recompilación de vitrumblur)
 rm -f "$HOME/.config/autostart/vitrum-shell.desktop"

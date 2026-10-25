@@ -179,9 +179,12 @@ for p_src_dst in "centro-control:org.vitrum.centrocontrol" \
 done
 
 cp "$REPO_DIR/iconos/"*.svg "$HOME/.local/share/icons/hicolor/scalable/apps/"
-# iconos de apps web (Disney+, HBO Max) con la forma y la sombra de WhiteSur
+# iconos de apps que WhiteSur no trae (Disney+, HBO Max, Haruna, Glassy Music…) con su forma y su sombra;
+# las esquinas van recortadas en el PNG incrustado porque QtSvg no aplica clipPath a <image>
 for t in WhiteSur WhiteSur-dark; do
     [ -d "$HOME/.local/share/icons/$t/apps/scalable" ] && cp "$REPO_DIR/iconos-apps/"*.svg "$HOME/.local/share/icons/$t/apps/scalable/"
+    # Qt usa icon-theme.cache: sin regenerarla los iconos nuevos no se ven hasta la próxima actualización del tema
+    [ -f "$HOME/.local/share/icons/$t/icon-theme.cache" ] && gtk-update-icon-cache -f -q "$HOME/.local/share/icons/$t" 2>/dev/null || true
 done
 
 # Pantalla de bloqueo estilo Sequoia (capa propia sobre la de KDE; «bash bloqueo/instalar.sh --quitar» la quita)

@@ -225,6 +225,14 @@ Window {
     // Cambiar de pantalla (o de borde) una superficie layer-shell exige volver a crearla (ocultar y mostrar)
     function remap() { visible = false; remapTimer.restart() }
     Timer { id: remapTimer; interval: 40; onTriggered: { dock.visible = true; dock.updateRegions() } }
+    // Al bloquear, el monitor entra en reposo y su salida desaparece unos segundos: el compositor cierra la
+    // superficie y el dock queda oculto aunque la pantalla vuelva con el mismo nombre. Se vuelve a mostrar en
+    // cuanto hay otra vez una pantalla real (la provisional de Qt no tiene nombre).
+    Timer {
+        interval: 1000; repeat: true
+        running: !dock.visible && !remapTimer.running
+        onTriggered: if (dock.screen && dock.screen.name !== "") { dock.visible = true; dock.updateRegions() }
+    }
     function moveTo(s) {
         if (screen && screen.name === s.name) return
         visible = false

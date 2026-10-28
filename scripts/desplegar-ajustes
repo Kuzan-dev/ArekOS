@@ -166,7 +166,8 @@ PartOf=graphical-session.target
 After=plasma-plasmashell.service
 [Service]
 ExecStart=%h/.local/bin/vitrum-ajustes --shell
-Restart=on-failure
+# Al volver de la suspensión desaparecen todas las pantallas y Qt cierra el proceso sin error: reiniciarlo siempre
+Restart=always
 RestartSec=2
 Slice=session.slice
 [Install]

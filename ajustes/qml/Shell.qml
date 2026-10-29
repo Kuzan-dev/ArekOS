@@ -3,6 +3,7 @@ import org.kde.taskmanager as TaskManager
 
 // Escritorio de Vitrum: dock, Launchpad y Spotlight en un solo proceso (se abren al instante).
 QtObject {
+    id: shell
     property var dock: Dock { visible: true }
     property var launchpad: Launchpad {}
     property var spotlight: Spotlight {}
@@ -37,6 +38,21 @@ QtObject {
         interval: 2500; running: true; repeat: true; triggeredOnStart: true
         onTriggered: Sys.runAsync("vitrum-primaria", "kscreen-doctor", ["-j"])
     }
+    // Pantallas que desaparecen y vuelven (KVM, monitor apagado o desenchufado): cuando la lista de pantallas se
+    // estabiliza, se vuelve a colocar el dock en la principal recreando su superficie
+    property bool remapPending: false
+    property var screensWatch: Connections {
+        target: Qt.application
+        function onScreensChanged() { screensSettle.restart() }
+    }
+    property var screensSettle: Timer {
+        interval: 1200
+        onTriggered: {
+            if (!Qt.application.screens.length) return
+            remapPending = true
+            Sys.runAsync("vitrum-primaria", "kscreen-doctor", ["-j"])
+        }
+    }
     property var primaryWatch: Connections {
         target: Sys
         function onFinished(tag, code, out) {
@@ -44,9 +60,45 @@ QtObject {
             try {
                 const o = JSON.parse(out).outputs.filter(x => x.enabled).sort((a, b) => a.priority - b.priority)[0]
                 const s = o ? Qt.application.screens.find(x => x.name === o.name) : null
-                if (s && (!primary || primary.name !== s.name)) { primary = s; dock.moveTo(s) }
+                if (s && (!primary || primary.name !== s.name || remapPending)) {
+                    primary = s
+                    dock.moveTo(s, remapPending)
+                    syncDocks(remapPending)
+                    remapPending = false
+                }
             } catch (e) {}
         }
+    }
+    // Docks de las pantallas secundarias: ocultos siempre, salen al llevar el puntero al borde de su pantalla
+    // (para cambiar de app sin ir hasta la principal). Solo donde ese borde es un borde real: si hay otra
+    // pantalla pegada a ese lado, el puntero pasa de largo y no debe sacarlo.
+    property var dockComp: Component { Dock { secondary: true } }
+    property var extraDocks: ({})
+    function edgeFree(s) {
+        const pos = dock.position
+        return !Qt.application.screens.some(o => {
+            if (o === s) return false
+            if (pos === "bottom") return o.virtualY === s.virtualY + s.height && o.virtualX < s.virtualX + s.width && o.virtualX + o.width > s.virtualX
+            const touch = pos === "left" ? o.virtualX + o.width === s.virtualX : o.virtualX === s.virtualX + s.width
+            return touch && o.virtualY < s.virtualY + s.height && o.virtualY + o.height > s.virtualY
+        })
+    }
+    function syncDocks(force) {
+        // extraDocks se copia al leerlo (property var): se trabaja sobre una copia y se vuelve a asignar
+        const docks = Object.assign({}, extraDocks), want = {}
+        if (primary) for (const s of Qt.application.screens) if (s.name !== primary.name && edgeFree(s)) want[s.name] = s
+        for (const n of Object.keys(docks)) {
+            if (force || !want[n] || docks[n].target.name !== n) { docks[n].visible = false; docks[n].destroy(); delete docks[n] }
+        }
+        for (const n of Object.keys(want)) {
+            if (docks[n]) continue
+            const d = dockComp.createObject(shell)
+            d.target = want[n]
+            d.visible = true
+            d.moveTo(want[n], true)
+            docks[n] = d
+        }
+        extraDocks = docks
     }
     // Spectacle (captura de pantalla): Launchpad está en la capa superior y Spotlight/Centro de Control en la de
     // superposición, con el teclado: tapaban el editor de Spectacle y se quedaban con Esc (que cerraba la captura).
@@ -73,6 +125,10 @@ QtObject {
         }
     }
     // El esquema de color puede cambiar en cualquier momento (modo claro/oscuro)
-    property var themeWatch: Timer { interval: 1500; running: true; repeat: true; onTriggered: { Theme.refresh(); dock.reload() } }
+    property var themeWatch: Timer { interval: 1500; running: true; repeat: true; onTriggered: {
+        Theme.refresh(); dock.reload()
+        for (const n of Object.keys(extraDocks)) extraDocks[n].reload()
+        syncDocks(false)        // por si cambió el borde del dock
+    } }
     Component.onCompleted: { Theme.refresh(); Sys.watchService("org.kde.spectacle") }
 }

@@ -19,6 +19,8 @@ Window {
     property bool hideOnMax: true
     // botones de cada ventana en la vista previa: "abajo" o "arriba" de la miniatura
     property string previewButtons: "abajo"
+    // dock de una pantalla secundaria: siempre oculto, sale al llevar el puntero a su borde (Shell.qml)
+    property bool secondary: false
     // Material medido en macOS (ver tema-plasma/MATERIAL.md): desenfoque σ≈30 (fuerza 10 de KWin), saturación
     // y contraste del efecto de contraste de KWin, y una capa negra (oscuro) o blanca (claro) que fija brillo y gris.
     // Se puede recalibrar en vitrumrc [Material].
@@ -47,6 +49,9 @@ Window {
         indicators = c("ShowIndicators", "true") === "true"
         hideOnMax = c("HideOnMaximize", "true") === "true"
         previewButtons = c("PreviewButtons", "abajo") === "arriba" ? "arriba" : "abajo"
+        // lo que se fije o quite desde el dock de otra pantalla
+        const l = c("Launchers", "")
+        if (l && l !== pinned.join(",")) pinned = l.split(",").filter(x => x)
     }
     readonly property bool vertical: position !== "bottom"
     readonly property int iconSize: Math.round(tile * 0.9)
@@ -90,7 +95,7 @@ Window {
     // También se aparta de una ventana maximizada o a pantalla completa en su pantalla (y escritorio)
     readonly property bool covered: hideOnMax && coverCount > 0
     property int coverCount: 0
-    readonly property bool revealed: !(autohide || covered) || hovering || dockMenu.visible || holdTimer.running
+    readonly property bool revealed: !(autohide || covered || secondary) || hovering || dockMenu.visible || holdTimer.running
     TaskManager.TasksModel {
         id: winTasks
         groupMode: TaskManager.TasksModel.GroupDisabled
@@ -179,7 +184,7 @@ Window {
                              : position === "right" ? (LayerShell.Window.AnchorRight | LayerShell.Window.AnchorTop | LayerShell.Window.AnchorBottom)
                              : (LayerShell.Window.AnchorBottom | LayerShell.Window.AnchorLeft | LayerShell.Window.AnchorRight)
     // con "apartarse de las ventanas maximizadas" no reserva espacio: la ventana maximizada ocupa toda la pantalla
-    LayerShell.Window.exclusionZone: autohide || hideOnMax ? 0 : barH + gap
+    LayerShell.Window.exclusionZone: autohide || hideOnMax || secondary ? 0 : barH + gap
     LayerShell.Window.keyboardInteractivity: LayerShell.Window.KeyboardInteractivityNone
 
     // Clic en el icono de una app: la trae al frente (su última ventana usada, restaurada si estaba minimizada).
@@ -225,14 +230,20 @@ Window {
     // Cambiar de pantalla (o de borde) una superficie layer-shell exige volver a crearla (ocultar y mostrar)
     function remap() { visible = false; remapTimer.restart() }
     Timer { id: remapTimer; interval: 40; onTriggered: { dock.visible = true; dock.updateRegions() } }
-    function moveTo(s) {
-        if (screen && screen.name === s.name) return
+    // force: tras desconectar y volver a conectar las pantallas (KVM, monitor apagado) la pantalla vuelve con el
+    // mismo nombre, pero el compositor destruyó la superficie del dock: hay que volver a crearla
+    function moveTo(s, force) {
+        if (!force && screen && screen.name === s.name) return
         visible = false
         screen = s
         visible = true
         updateRegions()
     }
     onPositionChanged: Qt.callLater(remap)
+    // pantalla fija de un dock secundario: justo después de crearlo, Qt/Wayland puede devolverlo a la principal
+    property var target: null
+    onScreenChanged: if (target && (!screen || screen.name !== target.name)) retarget.restart()
+    Timer { id: retarget; interval: 150; onTriggered: if (dock.target && (!dock.screen || dock.screen.name !== dock.target.name)) dock.moveTo(dock.target, true) }
     function save(list) { pinned = list; Sys.writeConf("vitrumrc", ["Dock"], "Launchers", list.join(",")) }
     // "file:///usr/share/applications/x.desktop" → "applications:x.desktop"
     function launcherId(url) {

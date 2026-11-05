@@ -44,9 +44,16 @@ def apply():
     g = tray + "[General]"
     gm = re.search(re.escape(g) + r"\n(.*?)(?=^\[|\Z)", text, re.M | re.S)
     body = gm.group(1) if gm else ""
+    old = re.search(r"^extraItems=(.*)$", body, re.M)
+    global clip_changed
+    clip_changed = ("org.kde.plasma.clipboard" in (old.group(1).split(",") if old else [])) != ("org.kde.plasma.clipboard" in items)
     body = re.sub(r"^extraItems=.*\n?", "", body, flags=re.M)
     body = f"extraItems={','.join(items)}\n" + body
     text = text.replace(gm.group(0), g + "\n" + body) if gm else text.rstrip("\n") + f"\n\n{g}\n{body}"
     open(RC, "w", encoding="utf-8").write(text)
 
+clip_changed = False
 stop_start(apply)
+# El shell de Vitrum carga Klipper solo si la bandeja no tiene el widget Portapapeles (Portapapeles.qml)
+if clip_changed:
+    subprocess.run(["systemctl", "--user", "try-restart", "vitrum-shell.service"])

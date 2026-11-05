@@ -199,6 +199,10 @@ for h in list(groups(rc)):
                     rc = del_group(rc, sub)
             rc = set_key(rc, g, "shownItems", "")
             rc = set_key(rc, g, "hiddenItems", "")
+# Sin el widget Portapapeles, Klipper lo carga vitrum-shell (Portapapeles.qml); por defecto Klipper
+# ignora las imágenes (solo guarda las de Spectacle): copiadas del navegador se perderían al cerrarlo
+import subprocess
+subprocess.run(["kwriteconfig6", "--file", "klipperrc", "--group", "General", "--key", "IgnoreImages", "false"])
 
 # 3e) Clic derecho en el escritorio: sin las entradas de KDE (sus ajustes nativos, terminal, modo edición…).
 #     "Cambiar fondo del escritorio…" y "Ajustes de pantallas…" llegan por un menú de servicio propio.

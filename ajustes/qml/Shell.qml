@@ -8,6 +8,7 @@ QtObject {
     property var launchpad: Launchpad {}
     property var spotlight: Spotlight {}
     property var controlCenter: ControlCenter {}
+    property var portapapeles: Portapapeles {}
     // Las peticiones que llegan mientras las ventanas aún se crean (arranque por D-Bus) se aplazan
     property bool ready: false
     property var pending: null

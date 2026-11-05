@@ -71,23 +71,28 @@ QtObject {
         }
     }
     // Docks de las pantallas secundarias: ocultos siempre, salen al llevar el puntero al borde de su pantalla
-    // (para cambiar de app sin ir hasta la principal). Solo donde ese borde es un borde real: si hay otra
-    // pantalla pegada a ese lado, el puntero pasa de largo y no debe sacarlo.
+    // (para cambiar de app sin ir hasta la principal). Donde ese borde está pegado a otra pantalla el puntero pasa
+    // de largo: ahí solo sale si se deja quieto un momento (Dock.sharedSpans).
     property var dockComp: Component { Dock { secondary: true } }
     property var extraDocks: ({})
-    function edgeFree(s) {
-        const pos = dock.position
-        return !Qt.application.screens.some(o => {
-            if (o === s) return false
-            if (pos === "bottom") return o.virtualY === s.virtualY + s.height && o.virtualX < s.virtualX + s.width && o.virtualX + o.width > s.virtualX
-            const touch = pos === "left" ? o.virtualX + o.width === s.virtualX : o.virtualX === s.virtualX + s.width
-            return touch && o.virtualY < s.virtualY + s.height && o.virtualY + o.height > s.virtualY
-        })
+    // tramos del borde del dock de s pegados a otra pantalla, en coordenada global a lo largo del borde
+    function sharedSpans(s) {
+        const pos = dock.position, out = []
+        for (const o of Qt.application.screens) {
+            if (o === s) continue
+            const touch = pos === "bottom" ? o.virtualY === s.virtualY + s.height
+                        : pos === "left" ? o.virtualX + o.width === s.virtualX : o.virtualX === s.virtualX + s.width
+            if (!touch) continue
+            const a = pos === "bottom" ? Math.max(o.virtualX, s.virtualX) : Math.max(o.virtualY, s.virtualY)
+            const b = pos === "bottom" ? Math.min(o.virtualX + o.width, s.virtualX + s.width) : Math.min(o.virtualY + o.height, s.virtualY + s.height)
+            if (b > a) out.push([a, b])
+        }
+        return out
     }
     function syncDocks(force) {
         // extraDocks se copia al leerlo (property var): se trabaja sobre una copia y se vuelve a asignar
         const docks = Object.assign({}, extraDocks), want = {}
-        if (primary) for (const s of Qt.application.screens) if (s.name !== primary.name && edgeFree(s)) want[s.name] = s
+        if (primary) for (const s of Qt.application.screens) if (s.name !== primary.name) want[s.name] = s
         for (const n of Object.keys(docks)) {
             if (force || !want[n] || docks[n].target.name !== n) { docks[n].visible = false; docks[n].destroy(); delete docks[n] }
         }
@@ -98,6 +103,10 @@ QtObject {
             d.visible = true
             d.moveTo(want[n], true)
             docks[n] = d
+        }
+        for (const n of Object.keys(docks)) {
+            const sp = sharedSpans(want[n])
+            if (JSON.stringify(sp) !== JSON.stringify(docks[n].sharedSpans)) docks[n].sharedSpans = sp
         }
         extraDocks = docks
     }

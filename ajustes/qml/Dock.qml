@@ -21,6 +21,17 @@ Window {
     property string previewButtons: "abajo"
     // dock de una pantalla secundaria: siempre oculto, sale al llevar el puntero a su borde (Shell.qml)
     property bool secondary: false
+    // tramos de su borde pegados a otra pantalla (coordenada global a lo largo del borde, Shell.qml): ahí el puntero
+    // pasa de una pantalla a otra, así que solo sale si se deja quieto un momento en el borde
+    property var sharedSpans: []
+    property bool armed: false        // dock secundario: el puntero ya ha pedido mostrarlo
+    function onSharedSpan(p) {
+        if (!screen) return false
+        const g = vertical ? screen.virtualY + p.y : screen.virtualX + p.x
+        return sharedSpans.some(r => g >= r[0] && g < r[1])
+    }
+    Timer { id: dwell; interval: 350; onTriggered: if (dock.hovering) dock.armed = true }
+    readonly property bool hoverReveal: hovering && (!secondary || armed)
     // Material medido en macOS (ver tema-plasma/MATERIAL.md): desenfoque σ≈30 (fuerza 10 de KWin), saturación
     // y contraste del efecto de contraste de KWin, y una capa negra (oscuro) o blanca (claro) que fija brillo y gris.
     // Se puede recalibrar en vitrumrc [Material].
@@ -95,7 +106,7 @@ Window {
     // También se aparta de una ventana maximizada o a pantalla completa en su pantalla (y escritorio)
     readonly property bool covered: hideOnMax && coverCount > 0
     property int coverCount: 0
-    readonly property bool revealed: !(autohide || covered || secondary) || hovering || dockMenu.visible || holdTimer.running
+    readonly property bool revealed: !(autohide || covered || secondary) || hoverReveal || dockMenu.visible || holdTimer.running
     TaskManager.TasksModel {
         id: winTasks
         groupMode: TaskManager.TasksModel.GroupDisabled
@@ -143,10 +154,13 @@ Window {
     }
     Timer { id: holdTimer; interval: 450 }
     onHoveringChanged: {
-        if (!hovering) holdTimer.restart()
+        if (secondary && hovering && !armed) { if (onSharedSpan(hover.point.position)) dwell.restart(); else armed = true }
+        if (!hovering) { dwell.stop(); if (armed || !secondary) holdTimer.restart(); armed = false }
+    }
+    onHoverRevealChanged: {
         // ampliación: se fijan las posiciones sin ampliar antes de que cambien los tamaños
-        if (hovering && magnify) { baseLen = vertical ? row.height : row.width; Qt.callLater(() => { magActive = hovering; trackPointer(hover.point.position) }) }
-        if (!hovering) magActive = false     // el puntero se conserva mientras la ampliación se recoge
+        if (hoverReveal && magnify) { baseLen = vertical ? row.height : row.width; Qt.callLater(() => { magActive = hoverReveal; trackPointer(hover.point.position) }) }
+        if (!hoverReveal) magActive = false     // el puntero se conserva mientras la ampliación se recoge
     }
     property bool magActive: false
     // entrada y salida suaves de la ampliación, como en macOS (~0,16 s)
@@ -259,8 +273,11 @@ Window {
         const dx = position === "left" ? -off : position === "right" ? off : 0
         const dy = position === "bottom" ? off : 0
         if (!revealed && off >= barH) {
-            // oculto del todo: solo una franja de 2 px en el borde para volver a mostrarlo
-            if (position === "bottom") Sys.setInputRegion(dock, bg.x, height - 2, bg.width, 2)
+            // oculto del todo: solo una franja de 2 px en el borde para volver a mostrarlo (en los secundarios, todo
+            // el borde: si el centro está pegado a otra pantalla, los extremos libres lo sacan al instante)
+            if (secondary) Sys.setInputRegion(dock, position === "right" ? width - 2 : 0, position === "bottom" ? height - 2 : 0,
+                                              vertical ? 2 : width, vertical ? height : 2)
+            else if (position === "bottom") Sys.setInputRegion(dock, bg.x, height - 2, bg.width, 2)
             else if (position === "left") Sys.setInputRegion(dock, 0, bg.y, 2, bg.height)
             else Sys.setInputRegion(dock, width - 2, bg.y, 2, bg.height)
             Sys.clearBlur(dock)

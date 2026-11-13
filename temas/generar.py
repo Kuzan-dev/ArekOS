@@ -55,6 +55,27 @@ LayoutName=org.kde.breeze.desktop
 LayoutName=org.kde.breeze.desktop
 """)
 
+# Desde Plasma 6.8 el diálogo de apagar/reiniciar ya no sale del tema global sino del paquete de escritorio
+# (shell). Un shell propio que solo trae ese diálogo, y un servicio D-Bus de usuario que arranca el programa del
+# diálogo con él (PLASMA_DEFAULT_SHELL solo para ese proceso): el escritorio sigue usando el de KDE.
+SHELL = f"{HOME}/.local/share/plasma/shells/org.vitrum.salida"
+shutil.rmtree(SHELL, ignore_errors=True)
+os.makedirs(f"{SHELL}/contents/logout", exist_ok=True)
+shutil.copy(os.path.join(os.path.dirname(os.path.abspath(__file__)), "logout/Logout.qml"), f"{SHELL}/contents/logout/Logout.qml")
+json.dump({"KPackageStructure": "Plasma/Shell", "KPlugin": {"Id": "org.vitrum.salida", "Name": "Vitrum (diálogo de salida)",
+           "License": "GPL-3.0", "Authors": [{"Name": "Vitrum"}]}}, open(f"{SHELL}/metadata.json", "w"), indent=4, ensure_ascii=False)
+greeter = None
+try:
+    for line in open("/usr/share/dbus-1/services/org.kde.LogoutPrompt.service"):
+        if line.startswith("Exec="):
+            greeter = line[5:].strip()
+except OSError:
+    pass
+if greeter:
+    os.makedirs(f"{HOME}/.local/share/dbus-1/services", exist_ok=True)
+    with open(f"{HOME}/.local/share/dbus-1/services/org.kde.LogoutPrompt.service", "w") as f:
+        f.write(f"[D-BUS Service]\nName=org.kde.LogoutPrompt\nExec=/usr/bin/env PLASMA_DEFAULT_SHELL=org.vitrum.salida {greeter}\n")
+
 # Fondo con variante clara y oscura: Plasma elige images/ o images_dark/ según el esquema
 w = f"{WALL}/Vitrum"
 shutil.rmtree(w, ignore_errors=True)

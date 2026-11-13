@@ -1,15 +1,17 @@
 import QtQuick
 import QtQuick.Layouts
+import QtQuick.Window
 import org.kde.kirigami as Kirigami
 import org.kde.plasma.private.sessions
 import org.kde.plasma.plasma5support as P5Support
 
 // Diálogo de apagar / reiniciar / cerrar sesión al estilo de macOS (Monterey/Sequoia).
-// Contexto que proporciona el sistema: sdtype, ShutdownType, maysd, spdMethods, screenGeometry, softwareUpdatePending.
+// Contexto que proporciona el sistema: sdtype, ShutdownType, maysd, spdMethods, softwareUpdatePending (y screenGeometry hasta Plasma 6.7).
 Item {
     id: root
-    width: screenGeometry.width
-    height: screenGeometry.height
+    // Plasma 6.7 pasa screenGeometry; desde 6.8 ya no existe y la ventana del diálogo da el tamaño
+    width: typeof screenGeometry !== "undefined" ? screenGeometry.width : Window.width
+    height: typeof screenGeometry !== "undefined" ? screenGeometry.height : Window.height
 
     signal logoutRequested()
     signal haltRequested()

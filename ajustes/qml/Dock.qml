@@ -402,6 +402,7 @@ Window {
                 icon: dock.trashFull ? "user-trash-full" : "user-trash"
                 name: "Papelera"
                 onClicked: Sys.detached("dolphin", ["trash:/"])
+                onMenuRequested: (x, y) => dockMenu.openTrash(this)
             }
         }
 
@@ -458,13 +459,31 @@ Window {
                 dock.save(list)
             })
             if (isWin) { sep(); add("Salir", () => tasks.requestClose(tasks.makeModelIndex(index))) }
-            // opciones del Dock, como al hacer clic derecho en el separador en macOS
             sep()
+            dockOptions(add)
+            show(item, items, acts)
+        }
+        // Papelera, como en macOS: Abrir y Vaciar Papelera (con confirmación; desactivado si está vacía)
+        function openTrash(item) {
+            const items = [], acts = []
+            const add = (text, f, enabled) => { items.push({ text: text, enabled: enabled !== false }); acts.push(f) }
+            add("Abrir", () => Sys.detached("dolphin", ["trash:/"]))
+            add("Vaciar Papelera…", () => Sys.detached("bash", ["-c",
+                "kdialog --title Papelera --warningcontinuecancel '¿Seguro que quieres eliminar permanentemente los ítems de la Papelera? No podrás deshacer esta acción.' --continue-label 'Vaciar Papelera' && ktrash6 --empty"]),
+                dock.trashFull)
+            items.push({ separator: true }); acts.push(null)
+            dockOptions(add)
+            show(item, items, acts)
+        }
+        // opciones del Dock, como al hacer clic derecho en el separador en macOS
+        function dockOptions(add) {
             add(dock.autohide ? "Desactivar ocultación" : "Activar ocultación",
                 () => { Sys.writeConf("vitrumrc", ["Dock"], "Autohide", dock.autohide ? "false" : "true"); dock.reload() })
             add(dock.magnify ? "Desactivar ampliación" : "Activar ampliación",
                 () => { Sys.writeConf("vitrumrc", ["Dock"], "Magnification", dock.magnify ? "false" : "true"); dock.reload() })
             add("Preferencias del Dock…", () => Sys.detached(Sys.home() + "/.local/bin/vitrum-ajustes", ["dock"]))
+        }
+        function show(item, items, acts) {
             // encima del icono, centrado (o a su lado con el Dock vertical)
             const r = item.mapToItem(null, 0, 0)
             visible = true

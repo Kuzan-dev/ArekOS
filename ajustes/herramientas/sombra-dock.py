@@ -1,13 +1,17 @@
 #!/usr/bin/env python3
-"""Genera qml/sombra-dock.png: sombra del Dock medida en macOS Monterey (negro al 24 %, desenfoque gaussiano
-σ = 19 px, sin desplazamiento, esquinas de 19 px), con el interior recortado para que no oscurezca el material.
-Se usa como BorderImage de 9 partes (borde = P + R)."""
+"""Genera la sombra de los paneles: la del Dock medida en macOS Monterey (negro al 24 %, desenfoque gaussiano
+σ = 19 px, sin desplazamiento), con el interior recortado para que no oscurezca el material. El recorte sigue las
+esquinas del panel: con otro radio quedaría un hueco sin sombra fuera de la esquina (un halo claro).
+Se usa como BorderImage de 9 partes (borde = P + R).
+Uso: sombra-dock.py <salida.png> [radio]   (19 por defecto: qml/sombra-dock.png; otros: qml/sombra-r<radio>.png)"""
 import sys
 import numpy as np
 from PIL import Image
 from scipy.ndimage import gaussian_filter
 
 P, R, SIGMA, ALPHA, SS = 60, 19, 19.0, 0.24, 4      # margen, radio, σ, opacidad, supermuestreo
+if len(sys.argv) > 2:
+    R = int(sys.argv[2])
 N = 2 * (P + R) + 240                                # rectángulo ancho: bordes rectos "infinitos"
 def rounded_mask(n, inset, r, ss):
     m = n * ss
@@ -22,4 +26,4 @@ shadow *= (1 - rect)                                  # nada dentro del Dock
 img = np.zeros((N, N, 4), np.uint8)
 img[..., 3] = np.clip(shadow * 255 + 0.5, 0, 255).astype(np.uint8)
 Image.fromarray(img, "RGBA").save(sys.argv[1])
-print("sombra", N, "px, borde", P + R)
+print("sombra", N, "px, radio", R, "borde", P + R)

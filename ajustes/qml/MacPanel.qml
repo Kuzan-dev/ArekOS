@@ -10,11 +10,16 @@ Item {
     default property alias content: inner.data
     readonly property rect blurRect: Qt.rect(x, y, width, height)
 
+    // la sombra va recortada por dentro con la forma del panel: una con otro radio dejaría un hueco sin sombra fuera
+    // de las esquinas (un halo claro). Hay una por radio (herramientas/sombra-dock.py); se usa la más cercana.
+    readonly property var radiosSombra: [12, 15, 18, 19, 24, 28, 30]
+    readonly property int radioSombra: radiosSombra.reduce((a, b) => Math.abs(b - radius) < Math.abs(a - radius) ? b : a)
     BorderImage {
         anchors.fill: parent
         anchors.margins: -60
-        border { left: 79; top: 79; right: 79; bottom: 79 }
-        source: "sombra-dock.png"
+        readonly property int borde: 60 + mp.radioSombra
+        border { left: borde; top: borde; right: borde; bottom: borde }
+        source: mp.radioSombra === 19 ? "sombra-dock.png" : "sombra-r" + mp.radioSombra + ".png"
         smooth: true
     }
     MaterialEdge {

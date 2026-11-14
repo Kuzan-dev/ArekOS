@@ -90,7 +90,7 @@ class Frame:
                 out = []
                 steps = s
                 for i in range(steps):
-                    a = 0.10 * (1 - i / steps) ** 2
+                    a = 0.11 * (1 - i / steps) ** 2   # caída suave, como la sombra de MacPanel (σ 19 px)
                     if i == 0:
                         a = OUTLINE   # contorno oscuro nítido de 1 px, como el de los paneles de macOS
                     out.append((i, a))
@@ -198,9 +198,10 @@ def build(DST, scheme, title):
     write(DST, "widgets/panel-background", panel)
 
     dialog = Frame()
-    # medido en macOS con el mismo fondo: menús y paneles ≈50 % de material sobre el desenfoque; esquinas de 16 px
-    # como los popovers de Tahoe (flotan separados de la barra: floatingApplets en plasmashellrc)
-    dialog.frame("", 16, 0.50 if BG == "#F6F6F6" else 0.45, 0.0 if BG == "#F6F6F6" else 0.20, (10, 10, 10, 10), shadow=12)
+    # medido en macOS con el mismo fondo: menús y paneles ≈50 % de material sobre el desenfoque. Borde igual que el de
+    # los paneles de vitrum-shell (MacPanel/Material.qml): filo interior blanco al 17 %, contorno exterior OUTLINE y
+    # sombra amplia; esquinas de 30 px como el Centro de Control (flotan separados de la barra: floatingApplets)
+    dialog.frame("", 30, 0.50 if BG == "#F6F6F6" else 0.45, 0.17, (10, 10, 10, 10), shadow=20)
     write(DST, "dialogs/background", dialog)
 
     # Selección de iconos (escritorio y listas de Plasma): como en macOS, un recuadro oscuro translúcido con filo
@@ -245,5 +246,5 @@ enabled=false
 
 for name, scheme, title, bg in VARIANTS:
     BG = bg
-    OUTLINE = 0.22 if bg == "#F6F6F6" else 0.55
+    OUTLINE = 0.08 if bg == "#F6F6F6" else 0.28   # el contorno de Material.qml (claro / oscuro)
     build(f"{HOME}/.local/share/plasma/desktoptheme/{name}", scheme, title)

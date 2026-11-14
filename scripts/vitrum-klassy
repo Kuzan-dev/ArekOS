@@ -39,7 +39,8 @@ kwriteconfig6 --file kwinrc --group org.kde.kdecoration2 --key BorderSizeAuto fa
 D() { kwriteconfig6 --file darklyrc --group Style "$@"; }
 D --key MenuOpacity 55
 D --key DolphinSidebarOpacity 78
-kwriteconfig6 --file darklyrc --group Common --key CornerRadius 10
+# controles con esquinas de 13 px, más cerca de las cápsulas de macOS Tahoe (los menús llevan 4 más: parchear-menus.py)
+kwriteconfig6 --file darklyrc --group Common --key CornerRadius 13
 # barras de desplazamiento superpuestas que aparecen al desplazarse, como en macOS
 kwriteconfig6 --file darklyrc --group Common --key ScrollBarTransient true
 # desenfoque de KWin calibrado contra macOS (σ≈30 px; ver ajustes/qml/Material.qml)

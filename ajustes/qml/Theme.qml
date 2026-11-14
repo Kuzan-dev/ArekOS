@@ -1,7 +1,7 @@
 pragma Singleton
 import QtQuick
 
-// Paleta y medidas tomadas de Ajustes del Sistema de macOS 15 Sequoia.
+// Paleta y medidas tomadas de Ajustes del Sistema de macOS 15 Sequoia; la barra lateral, de macOS 26 Tahoe.
 QtObject {
     id: t
 
@@ -15,6 +15,8 @@ QtObject {
     readonly property color windowBg: dark ? "#1E1E1E" : "#F6F6F6"
     readonly property color sidebarBg: dark ? Qt.rgba(0.16, 0.16, 0.17, 0.78) : Qt.rgba(0.90, 0.90, 0.90, 0.80)
     readonly property color sidebarEdge: dark ? Qt.rgba(0, 0, 0, 0.45) : Qt.rgba(0, 0, 0, 0.10)
+    // filo del panel flotante de la barra lateral (Tahoe)
+    readonly property color sidebarRim: dark ? Qt.rgba(1, 1, 1, 0.07) : Qt.rgba(0, 0, 0, 0.07)
     readonly property color card: dark ? "#252527" : "#F1F1F1"
     readonly property color separator: dark ? Qt.rgba(1, 1, 1, 0.08) : Qt.rgba(0, 0, 0, 0.06)
     readonly property color text: dark ? Qt.rgba(1, 1, 1, 0.88) : Qt.rgba(0, 0, 0, 0.85)

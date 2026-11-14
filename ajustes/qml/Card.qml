@@ -7,7 +7,7 @@ Rectangle {
     default property alias rows: col.data
     Layout.fillWidth: true
     implicitHeight: col.implicitHeight
-    radius: 10
+    radius: 14       // Tahoe (Sequoia: 10)
     color: Theme.card
     border.width: 1
     border.color: Theme.cardEdge

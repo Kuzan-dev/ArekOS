@@ -14,7 +14,8 @@ Item {
     property alias checked: chk.checked
     property bool separatorVisible: true
     property bool dimmed: false
-    property real minHeight: (tileIcon !== "" || tileGlyph !== "" || hasCheck) ? 34 : 30
+    // Tahoe: filas más altas que en Sequoia (34/30)
+    property real minHeight: (tileIcon !== "" || tileGlyph !== "" || hasCheck) ? 40 : 34
     default property alias trailing: trail.data
     signal clicked()
     signal checkToggled(bool value)
@@ -22,9 +23,11 @@ Item {
     Layout.fillWidth: true
     implicitHeight: Math.max(minHeight, texts.implicitHeight + 12)
 
+    // el separador empieza después del icono, como en Tahoe
     Rectangle {
         visible: row.separatorVisible
-        x: 14; width: parent.width - 28; height: 1
+        readonly property bool conIcono: row.tileIcon !== "" || row.tileGlyph !== ""
+        x: conIcono ? 14 + 20 + 9 : 14; width: parent.width - x - 14; height: 1
         color: Theme.separator
     }
     Rectangle {
@@ -42,7 +45,7 @@ Item {
         anchors.rightMargin: 12
         spacing: 9
         MacCheck { id: chk; visible: row.hasCheck; onToggled: (v) => row.checkToggled(v) }
-        Tile { visible: row.tileIcon !== "" || row.tileGlyph !== ""; icon: row.tileIcon; glyph: row.tileGlyph; base: row.tileColor; size: 20 }
+        Tile { visible: row.tileIcon !== "" || row.tileGlyph !== ""; icon: row.tileIcon; glyph: row.tileGlyph; base: row.tileColor; size: 22 }
         ColumnLayout {
             id: texts
             Layout.fillWidth: true

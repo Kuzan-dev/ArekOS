@@ -89,7 +89,7 @@ Window {
         menuMode = true
         Theme.refresh()
         open(v)
-        if (v === "calendario") calendario.mes = calendario.esteMes()
+        if (v === "calendario") { calendario.mes = calendario.esteMes(); pedirClima() }
         if (!visible) { showFullScreen(); if (v === "calendario") aparecer() }
         Qt.callLater(updateRegions)
     }
@@ -120,6 +120,7 @@ Window {
             else if (tag === "cc-bt") cc.dispositivos = out.split("\n").filter(l => l.indexOf("|") > 0).map(l => l.split("|"))
             else if (tag === "cc-sonido") { try { cc.salidas = JSON.parse(out) } catch (e) { cc.salidas = [] } }
             else if (tag === "cc-act") { Theme.refresh(); cc.refresh() }
+            else if (tag === "clima") cc.leerClima(code, out)
         }
     }
 
@@ -441,6 +442,31 @@ Window {
                     text: { const t = Qt.locale().toString(calendario.hoy, "dddd, d 'de' MMMM"); return t.charAt(0).toUpperCase() + t.slice(1) }
                     font.weight: Font.Bold
                 }
+                // clima: icono, temperatura y, al lado, el cielo y debajo la ciudad con la máxima y mínima del día
+                Item {
+                    visible: !!cc.clima
+                    width: parent.width; height: visible ? 44 : 0
+                    Kirigami.Icon {
+                        id: climaIco
+                        anchors.verticalCenter: parent.verticalCenter
+                        width: 32; height: 32
+                        source: cc.clima ? cc.climaIcono(cc.clima.codigo, cc.clima.dia) : ""
+                        fallback: "weather-clouds"
+                    }
+                    T {
+                        id: climaTemp
+                        anchors.left: climaIco.right; anchors.leftMargin: 8; anchors.verticalCenter: parent.verticalCenter
+                        text: cc.clima ? cc.clima.temp + "°" : ""
+                        font.pixelSize: 28; font.weight: Font.Light
+                    }
+                    Column {
+                        anchors.left: climaTemp.right; anchors.leftMargin: 12; anchors.right: parent.right
+                        anchors.verticalCenter: parent.verticalCenter
+                        T { width: parent.width; text: cc.clima ? cc.climaTexto(cc.clima.codigo) : ""; font.weight: Font.DemiBold; font.pixelSize: 12 }
+                        T { width: parent.width; text: cc.clima ? cc.ciudad + " · Máx.: " + cc.clima.max + "°  Mín.: " + cc.clima.min + "°" : ""; color: cc.fg2; font.pixelSize: 11 }
+                    }
+                }
+                Rectangle { visible: !!cc.clima; width: parent.width; height: 1; color: cc.sep }
                 Item {
                     width: parent.width; height: 20
                     T {
@@ -517,6 +543,54 @@ Window {
             }
         }
     }
+    // Clima de la ciudad (vitrumrc [Clima] Ciudad, Latitud, Longitud; por defecto Lima) desde open-meteo, que no
+    // necesita cuenta. Se pide al abrir el calendario, como mucho cada 15 minutos
+    property var clima: null
+    property real climaHora: 0
+    readonly property string ciudad: Sys.readConf("vitrumrc", ["Clima"], "Ciudad", "Lima")
+    function pedirClima() {
+        if (clima && Date.now() - climaHora < 15 * 60000) return
+        const lat = Sys.readConf("vitrumrc", ["Clima"], "Latitud", "-12.0464")
+        const lon = Sys.readConf("vitrumrc", ["Clima"], "Longitud", "-77.0428")
+        Sys.runAsync("clima", "curl", ["-s", "--max-time", "8", "https://api.open-meteo.com/v1/forecast?latitude=" + lat + "&longitude=" + lon
+                     + "&current=temperature_2m,weather_code,is_day&daily=temperature_2m_max,temperature_2m_min&timezone=auto&forecast_days=1"])
+    }
+    function leerClima(code, out) {
+        if (code !== 0) return
+        try {
+            const j = JSON.parse(out)
+            clima = { temp: Math.round(j.current.temperature_2m), codigo: j.current.weather_code, dia: j.current.is_day === 1,
+                      max: Math.round(j.daily.temperature_2m_max[0]), min: Math.round(j.daily.temperature_2m_min[0]) }
+            climaHora = Date.now()
+        } catch (e) {}
+    }
+    // códigos WMO de open-meteo: descripción e icono
+    function climaTexto(c) {
+        if (c === 0) return "Despejado"
+        if (c === 1) return "Mayormente despejado"
+        if (c === 2) return "Parcialmente nublado"
+        if (c === 3) return "Nublado"
+        if (c === 45 || c === 48) return "Niebla"
+        if (c >= 51 && c <= 57) return "Llovizna"
+        if (c >= 61 && c <= 67) return c === 61 ? "Lluvia ligera" : c === 65 ? "Lluvia fuerte" : "Lluvia"
+        if (c >= 71 && c <= 77) return "Nieve"
+        if (c >= 80 && c <= 82) return "Chubascos"
+        if (c === 85 || c === 86) return "Chubascos de nieve"
+        if (c >= 95) return "Tormenta"
+        return ""
+    }
+    function climaIcono(c, dia) {
+        if (c <= 1) return dia ? "weather-clear" : "weather-clear-night"
+        if (c === 2) return dia ? "weather-few-clouds" : "weather-few-clouds-night"
+        if (c === 3) return "weather-overcast"
+        if (c === 45 || c === 48) return "weather-fog"
+        if (c >= 51 && c <= 67) return c <= 57 || c === 61 ? "weather-showers-scattered" : "weather-showers"
+        if ((c >= 71 && c <= 77) || c === 85 || c === 86) return "weather-snow"
+        if (c >= 80 && c <= 82) return "weather-showers"
+        if (c >= 95) return "weather-storm"
+        return "weather-clouds"
+    }
+
     function nocturna(on) {
         // KWin solo recarga la luz nocturna con el aviso de --notify (org.kde.KWin.reconfigure no la aplica)
         act("kwriteconfig6 --notify --file kwinrc --group NightColor --key Active " + (on ? "false" : "true"))

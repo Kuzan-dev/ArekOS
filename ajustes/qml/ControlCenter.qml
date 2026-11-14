@@ -25,7 +25,9 @@ Window {
     LayerShell.Window.layer: LayerShell.Window.LayerOverlay
     LayerShell.Window.anchors: LayerShell.Window.AnchorTop | LayerShell.Window.AnchorBottom | LayerShell.Window.AnchorLeft | LayerShell.Window.AnchorRight
     LayerShell.Window.exclusionZone: -1
-    LayerShell.Window.keyboardInteractivity: LayerShell.Window.KeyboardInteractivityOnDemand
+    // teclado en exclusiva mientras está abierto (como Spotlight): siendo «on-screen-display», KWin no le da el
+    // foco al abrirse y Escape no llegaba. Un clic fuera la cierra, así que no puede quedarse con el teclado
+    LayerShell.Window.keyboardInteractivity: LayerShell.Window.KeyboardInteractivityExclusive
 
     readonly property int barHeight: 32
     readonly property bool dark: Theme.dark
@@ -640,6 +642,8 @@ Window {
                             verticalAlignment: TextInput.AlignVCenter
                             echoMode: TextInput.Password; color: cc.fg; font.pixelSize: 12
                             focus: parent.visible
+                            // Escape en el campo: cancela la contraseña (el siguiente Escape ya cierra)
+                            Keys.onEscapePressed: { text = ""; cc.pidiendoClave = "" }
                             onAccepted: { cc.act("nmcli dev wifi connect '" + modelData[1].replace(/'/g, "") + "' password '" + text.replace(/'/g, "") + "'"); cc.pidiendoClave = ""; text = "" }
                             Text { visible: !parent.text; text: "Contraseña"; color: cc.fg2; font.pixelSize: 12; anchors.verticalCenter: parent.verticalCenter }
                         }

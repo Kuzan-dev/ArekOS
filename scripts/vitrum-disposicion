@@ -304,6 +304,11 @@ with open(kr, "w", encoding="utf-8") as f:
 kw = f"{HOME}/.config/kwinrc"
 k = load(kw) if os.path.exists(kw) else ""
 k = set_key(k, "[ModifierOnlyShortcuts]", "Meta", "org.vitrum.Shell,/Shell,org.vitrum.Shell,ToggleLaunchpad")
+# animaciones de macOS: minimizar con la lámpara mágica (el genio) hacia el icono del Dock y diálogos que bajan de la
+# barra de título como las hojas de macOS
+k = set_key(k, "[Plugins]", "magiclampEnabled", "true")
+k = set_key(k, "[Plugins]", "squashEnabled", "false")
+k = set_key(k, "[Plugins]", "sheetEnabled", "true")
 # esquinas activas: valores iniciales solo si nunca se han configurado (Ajustes → Escritorio y Dock → Esquinas activas…)
 if "[ElectricBorders]" not in k:
     k = set_key(k, "[Effect-overview]", "BorderActivate", "9")

@@ -365,6 +365,7 @@ Window {
                     readonly property bool helper: /^org\.vitrum\.(launchpad|spotlight-atajo|vistarapida)/.test(String(model.AppId || ""))
                     visible: !helper
                     DockIcon {
+                        id: appIcon
                         visible: !parent.helper
                         icon: model.decoration
                         name: model.AppName || model.display
@@ -375,6 +376,19 @@ Window {
                         starting: model.IsStartup === true
                         onClicked: dock.clickApp(index, model, this)
                         onMenuRequested: (x, y) => dockMenu.openFor(index, model, this, x, y)
+                        // KWin anima el minimizado (lámpara mágica, como el genio de macOS) hacia el icono de la app:
+                        // se le dice dónde está, cuando el Dock queda quieto (no en cada fotograma de la magnificación)
+                        function publicarGeometria() {
+                            if (!visible || model.IsWindow !== true) return
+                            const p = mapToGlobal(0, 0)
+                            tasks.requestPublishDelegateGeometry(tasks.makeModelIndex(index), Qt.rect(p.x, p.y, width, height), appIcon)
+                        }
+                        Timer { id: geometria; interval: 400; onTriggered: appIcon.publicarGeometria() }
+                        onXChanged: geometria.restart()
+                        onYChanged: geometria.restart()
+                        onHasWindowsChanged: geometria.restart()
+                        Component.onCompleted: geometria.restart()
+                        Connections { target: dock; function onRevealedChanged() { geometria.restart() } }
                     }
                     DockIcon {
                         visible: index === 0

@@ -1,0 +1,12 @@
+#!/bin/bash
+# Estado para los iconos de Wi‑Fi y Sonido de la barra de menús (plasmoide org.vitrum.controles):
+# si se muestran (Ajustes → Barra de menús) y el estado de la red. Una línea clave=valor por dato.
+t() { timeout 2 "$@" 2>/dev/null; }
+echo "show_wifi=$(kreadconfig6 --file vitrumrc --group BarraMenus --key Wifi --default true)"
+echo "show_sonido=$(kreadconfig6 --file vitrumrc --group BarraMenus --key Sonido --default true)"
+dev=$(t nmcli -t -f TYPE,STATE device)
+echo "wifi_dev=$(awk -F: '$1=="wifi"{print $2; exit}' <<<"$dev")"
+echo "ethernet=$(awk -F: '$1=="ethernet" && $2=="connected"{print 1; exit}' <<<"$dev")"
+echo "wifi_on=$(t nmcli -t -f WIFI general)"
+# señal de la red conectada (0-100), sin pedir un escaneo nuevo
+echo "signal=$(t nmcli -t -f IN-USE,SIGNAL device wifi list --rescan no | awk -F: '$1=="*"{print $2; exit}')"

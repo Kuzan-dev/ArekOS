@@ -138,6 +138,46 @@ def write(DST, path, frame):
         f.write(frame.svg())
 
 
+def tabbar_pill(DST):
+    """Resalte de los iconos abiertos de la bandeja (widgets/tabbar, north-active-tab): una píldora de 20 px de alto
+    centrada en la barra de 32 px, como la de los iconos de Vitrum y la de macOS Tahoe. El color es el del texto al
+    20 %, así sirve en la barra clara y en la oscura. Las piezas de arriba y abajo llevan 6 px transparentes."""
+    import gzip
+    import xml.etree.ElementTree as ET
+    path = os.path.join(DST, "widgets/tabbar.svgz")
+    if not os.path.exists(path):
+        return
+    ET.register_namespace("", "http://www.w3.org/2000/svg")
+    root = ET.fromstring(gzip.open(path).read())
+    for parent in root.iter():
+        for child in list(parent):
+            if child.get("id", "").startswith("north-active-tab"):
+                parent.remove(child)
+    r, pad = 10, 6
+    fill = 'class="ColorScheme-Text" fill="currentColor" fill-opacity="0.2"'
+    quarter = f'<path d="M0,{r} A{r},{r} 0 0 1 {r},0 L{r},{r} Z" {fill}/>'
+    pieces = {
+        "topleft": (r, pad + r, f'<g transform="translate(0,{pad})">{quarter}</g>'),
+        "topright": (r, pad + r, f'<g transform="translate({r},{pad}) scale(-1,1)">{quarter}</g>'),
+        "bottomleft": (r, r + pad, f'<g transform="translate(0,{r}) scale(1,-1)">{quarter}</g>'),
+        "bottomright": (r, r + pad, f'<g transform="translate({r},{r}) scale(-1,-1)">{quarter}</g>'),
+        "top": (10, pad + r, f'<rect y="{pad}" width="10" height="{r}" {fill}/>'),
+        "bottom": (10, r + pad, f'<rect width="10" height="{r}" {fill}/>'),
+        "left": (r, 10, f'<rect width="{r}" height="10" {fill}/>'),
+        "right": (r, 10, f'<rect width="{r}" height="10" {fill}/>'),
+        "center": (10, 10, f'<rect width="10" height="10" {fill}/>'),
+    }
+    x = 200   # dentro del lienzo (360×300), en una fila libre abajo; se dibujan por id
+    for name, (w, h, body) in pieces.items():
+        g = ET.fromstring(f'<g xmlns="http://www.w3.org/2000/svg" id="north-active-tab-{name}" transform="translate({x},270)">'
+                          f'<rect width="{w}" height="{h}" fill="none"/>{body}</g>')
+        root.append(g)
+        x += w + 4
+    os.remove(path)
+    with open(os.path.join(DST, "widgets/tabbar.svg"), "wb") as f:
+        f.write(ET.tostring(root, encoding="utf-8", xml_declaration=True))
+
+
 def build(DST, scheme, title):
     if not os.path.isdir(SRC):
         sys.exit("falta MacTahoe-Light")
@@ -158,8 +198,9 @@ def build(DST, scheme, title):
     write(DST, "widgets/panel-background", panel)
 
     dialog = Frame()
-    # medido en macOS con el mismo fondo: menús y paneles ≈50 % de material sobre el desenfoque
-    dialog.frame("", 10, 0.50 if BG == "#F6F6F6" else 0.45, 0.0 if BG == "#F6F6F6" else 0.20, (8, 8, 8, 8), shadow=12)
+    # medido en macOS con el mismo fondo: menús y paneles ≈50 % de material sobre el desenfoque; esquinas de 16 px
+    # como los popovers de Tahoe (flotan separados de la barra: floatingApplets en plasmashellrc)
+    dialog.frame("", 16, 0.50 if BG == "#F6F6F6" else 0.45, 0.0 if BG == "#F6F6F6" else 0.20, (10, 10, 10, 10), shadow=12)
     write(DST, "dialogs/background", dialog)
 
     # Selección de iconos (escritorio y listas de Plasma): como en macOS, un recuadro oscuro translúcido con filo
@@ -172,6 +213,8 @@ def build(DST, scheme, title):
     tip = Frame()
     tip.frame("", 6, 0.86, 0.25, (3, 3, 8, 8), shadow=6)
     write(DST, "widgets/tooltip", tip)
+
+    tabbar_pill(DST)
 
     meta = f"{DST}/metadata.json"
     import json

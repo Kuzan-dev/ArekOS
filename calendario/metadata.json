@@ -1,0 +1,13 @@
+{
+    "KPlugin": {
+        "Id": "org.vitrum.calendario",
+        "Name": "Reloj",
+        "Description": "Fecha y hora de la barra de menús con el calendario, como en macOS Tahoe",
+        "Icon": "preferences-system-time",
+        "Authors": [{ "Name": "Vitrum" }],
+        "License": "GPL-3.0",
+        "Version": "1.0"
+    },
+    "KPackageStructure": "Plasma/Applet",
+    "X-Plasma-API-Minimum-Version": "6.0"
+}

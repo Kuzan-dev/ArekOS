@@ -14,9 +14,31 @@ PlasmoidItem {
     activationTogglesExpanded: false
     Plasmoid.backgroundHints: PlasmaCore.Types.NoBackground
 
-    P5Support.DataSource { id: sh; engine: "executable"; onNewData: (s) => disconnectSource(s) }
+    // abierto: el icono se resalta con una píldora, como en macOS Tahoe. Se marca al pulsar y, mientras siga
+    // abierto, se pregunta a vitrum-shell (org.vitrum.Shell.Abierto) hasta que se cierre
+    property bool abierto: false
+    property real pulsado: 0
+    Timer {
+        id: vigila
+        interval: 300; repeat: true
+        onTriggered: sh.connectSource("dbus-send --session --print-reply=literal --dest=org.vitrum.Shell /Shell org.vitrum.Shell.Abierto #" + Date.now())
+    }
+    P5Support.DataSource {
+        id: sh; engine: "executable"
+        onNewData: (s, data) => {
+            // la respuesta puede llegar antes de que vitrum-shell procese el clic: se ignora el primer instante
+            if (s.indexOf("org.vitrum.Shell.Abierto") >= 0 && Date.now() - root.pulsado > 500) {
+                root.abierto = (data.stdout || "").trim() === "cc"
+                if (!root.abierto) vigila.stop()
+            }
+            disconnectSource(s)
+        }
+    }
     function toggle() {
         pressedLook.restart()
+        abierto = !abierto
+        pulsado = Date.now()
+        vigila.restart()
         sh.connectSource("dbus-send --session --print-reply --type=method_call --dest=org.vitrum.Shell /Shell org.vitrum.Shell.ToggleControlCenter #" + Date.now())
     }
     // Super+A (atajo del widget)
@@ -33,8 +55,8 @@ PlasmoidItem {
         Rectangle {
             anchors.verticalCenter: parent.verticalCenter
             x: 0
-            width: 26; height: 20; radius: 5
-            color: parent.pressed || pressedLook.running ? Qt.rgba(1, 1, 1, 0.25) : "transparent"
+            width: 26; height: 20; radius: 10
+            color: parent.pressed || pressedLook.running ? Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.28) : root.abierto ? Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.2) : "transparent"
             Column {
                 anchors.centerIn: parent; spacing: 2.5
                 Repeater {

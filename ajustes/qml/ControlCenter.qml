@@ -1,13 +1,16 @@
 import QtQuick
 import QtQuick.Window
 import QtQuick.Layouts
+import QtQuick.Shapes
+import Qt5Compat.GraphicalEffects as GE
 import org.kde.layershell as LayerShell
 import org.kde.kirigami as Kirigami
 import org.kde.plasma.private.mpris as Mpris
 
-// Centro de Control de Vitrum, con las medidas y el material del de macOS Monterey: panel flotante de 300 px
-// (contorno incluido) a 5 px de la barra de menús y del borde derecho, esquinas de 15 px, módulos a 10 px del
-// borde. Cada detalle (Wi‑Fi, Bluetooth, Sonido, Concentración) cambia el panel al tamaño de su contenido.
+// Centro de Control de Vitrum al estilo de macOS Tahoe: panel flotante de 340 px a 5 px de la barra de menús y del
+// borde derecho, esquinas de 30 px y módulos de cristal (píldoras, botones redondos, deslizadores finos) a 12 px del
+// borde. Cada detalle (Wi‑Fi, Bluetooth, Sonido, Concentración) es un menú de 298 px con esquinas de 18 px, del
+// tamaño de su contenido.
 // Es una superficie transparente de pantalla completa: un clic fuera del panel lo cierra.
 Window {
     id: cc
@@ -30,6 +33,11 @@ Window {
     readonly property color off: dark ? Qt.rgba(1, 1, 1, 0.16) : Qt.rgba(0, 0, 0, 0.09)
     readonly property color accent: Theme.accent
     readonly property color sep: dark ? Qt.rgba(1, 1, 1, 0.12) : Qt.rgba(0, 0, 0, 0.10)
+    // cristal de los módulos de Tahoe: relleno claro y filo blanco sobre el material del panel
+    readonly property color glass: dark ? Qt.rgba(1, 1, 1, 0.10) : Qt.rgba(1, 1, 1, 0.45)
+    readonly property color glassHover: dark ? Qt.rgba(1, 1, 1, 0.15) : Qt.rgba(1, 1, 1, 0.60)
+    readonly property color glassEdge: dark ? Qt.rgba(1, 1, 1, 0.14) : Qt.rgba(1, 1, 1, 0.75)
+    readonly property color circleOff: dark ? Qt.rgba(1, 1, 1, 0.16) : Qt.rgba(0, 0, 0, 0.08)
     readonly property string bin: Sys.home() + "/.local/bin/"
 
     // ── Estado ─────────────────────────────────────────────────────────────
@@ -40,16 +48,29 @@ Window {
     property var salidas: []
     property string pidiendoClave: ""
     readonly property bool dnd: st.dnd !== undefined && st.dnd !== "" && new Date(st.dnd) > new Date()
+    // menú suelto de un icono de la barra (Wi‑Fi, Sonido): solo esa vista, bajo el icono, como en macOS
+    property bool menuMode: false
+    property real menuX: 0
 
     function toggle() { visible ? close2() : open2() }
     function open2() {
-        view = ""; pidiendoClave = ""
+        view = ""; pidiendoClave = ""; menuMode = false
         Theme.refresh()
         refresh()
         showFullScreen()
         Qt.callLater(updateRegions)
     }
-    function close2() { hide(); view = "" }
+    function close2() { hide(); view = ""; menuMode = false }
+    // x llega en coordenadas globales (borde izquierdo del icono); la superficie ocupa solo su pantalla
+    function menu(v, x) {
+        if (visible && menuMode && view === v) { close2(); return }
+        menuX = x - (screen ? screen.virtualX : 0)
+        menuMode = true
+        Theme.refresh()
+        open(v)
+        if (!visible) showFullScreen()
+        Qt.callLater(updateRegions)
+    }
     function open(v) { view = v; pidiendoClave = ""; redes = []; dispositivos = []; refresh() }
 
     function refresh() {
@@ -76,12 +97,37 @@ Window {
             } else if (tag === "cc-wifi") cc.redes = out.split("\n").filter(l => l.indexOf("|") > 0).map(l => l.split("|"))
             else if (tag === "cc-bt") cc.dispositivos = out.split("\n").filter(l => l.indexOf("|") > 0).map(l => l.split("|"))
             else if (tag === "cc-sonido") { try { cc.salidas = JSON.parse(out) } catch (e) { cc.salidas = [] } }
-            else if (tag === "cc-act") cc.refresh()
+            else if (tag === "cc-act") { Theme.refresh(); cc.refresh() }
         }
     }
 
     Mpris.Mpris2Model { id: mpris }
-    readonly property var player: mpris.currentPlayer
+    // el que esté sonando; al pausarlo se queda (para poder reanudarlo) y, si no ha sonado ninguno, el actual de
+    // KDE. currentPlayer solo no basta: puede quedarse en otro reproductor detenido (p. ej. una pestaña de Brave)
+    // mientras suena Glassy Music
+    Instantiator {
+        id: reproductores
+        model: mpris
+        delegate: QtObject {
+            readonly property var container: model.container
+            readonly property bool multiplexer: model.isMultiplexer
+            readonly property int estado: model.playbackStatus
+        }
+    }
+    function reproductorAbierto(c) {
+        for (let i = 0; i < reproductores.count; i++) { const r = reproductores.objectAt(i); if (r && r.container === c) return true }
+        return false
+    }
+    readonly property var sonando: {
+        for (let i = 0; i < reproductores.count; i++) {
+            const r = reproductores.objectAt(i)
+            if (r && !r.multiplexer && r.container && r.estado === Mpris.PlaybackStatus.Playing) return r.container
+        }
+        return null
+    }
+    property var ultimo: null
+    onSonandoChanged: if (sonando) ultimo = sonando
+    readonly property var player: sonando || (ultimo && reproductorAbierto(ultimo) ? ultimo : mpris.currentPlayer)
 
     // ── Superficie ─────────────────────────────────────────────────────────
     function updateRegions() {
@@ -92,97 +138,160 @@ Window {
     }
     onWidthChanged: Qt.callLater(updateRegions)
     MouseArea { anchors.fill: parent; onClicked: cc.close2() }
-    Item { focus: cc.visible; Keys.onEscapePressed: cc.view !== "" ? cc.view = "" : cc.close2() }
+    Item { focus: cc.visible; Keys.onEscapePressed: cc.view !== "" && !cc.menuMode ? cc.view = "" : cc.close2() }
 
     MacPanel {
         id: panel
-        radius: 15
-        width: 298
-        x: cc.width - 5 - 1 - width
+        radius: cc.view === "" ? 30 : 18
+        width: cc.view === "" ? 340 : 298
+        onRadiusChanged: cc.updateRegions()
+        onWidthChanged: cc.updateRegions()
+        // como menú, alineado con el icono que lo abre (sin salirse de la pantalla); si no, a la derecha
+        x: cc.menuMode ? Math.max(6, Math.min(cc.width - 5 - 1 - width, cc.menuX - 6)) : cc.width - 5 - 1 - width
         y: cc.barHeight + 5 + 1
         height: cc.view === "" ? main.fullH : detail.fullH
         onHeightChanged: cc.updateRegions()
         onXChanged: cc.updateRegions()
         MouseArea { anchors.fill: parent }   // los clics dentro no cierran
 
-        // Vista principal: dos columnas de 135 px, módulos de 61 px (el de red, 133)
+        // Vista principal como en macOS Tahoe: dos columnas de 153 px; Wi‑Fi, Bluetooth, AirDrop, Modo oscuro y
+        // Concentración en píldoras de 64 px, Música en un bloque de dos filas, botones redondos y deslizadores finos
         Column {
             id: main
             visible: cc.view === ""
-            x: 9; y: 9
-            width: parent.width - 18
+            x: 12; y: 12
+            width: parent.width - 24
             spacing: 10
-            readonly property real fullH: childrenRect.height + 18
+            readonly property real fullH: childrenRect.height + 24
+            readonly property real col: (width - spacing) / 2
             Row {
                 spacing: 10
-                Module {
-                    width: 135; height: 133
-                    Column {
-                        x: 10; y: 13
-                        width: parent.width - 20
-                        spacing: 14
-                        Toggle {
-                            width: parent.width
-                            icon: cc.st.wifi_dev ? "network-wireless-symbolic" : "network-wired-symbolic"
-                            title: cc.st.wifi_dev ? "Wi‑Fi" : "Red"
-                            subtitle: cc.st.wifi_dev ? (cc.st.wifi_on === "enabled" ? (cc.st.wifi_dev.split(":")[1] || "Activado") : "Desactivado")
-                                                     : (cc.st.ethernet ? "Ethernet" : "Sin conexión")
-                            on: cc.st.wifi_dev ? cc.st.wifi_on === "enabled" : !!cc.st.ethernet
-                            onToggle: cc.st.wifi_dev ? cc.act("nmcli radio wifi " + (on ? "off" : "on")) : cc.ajustes("red")
-                            onOpen: cc.st.wifi_dev ? cc.open("wifi") : cc.ajustes("red")
-                        }
-                        Toggle {
-                            width: parent.width
-                            icon: "network-bluetooth-symbolic"
-                            title: "Bluetooth"
-                            subtitle: cc.st.bt === "1" ? (cc.st.bt_on === "yes" ? "Activado" : "Desactivado") : "No disponible"
-                            on: cc.st.bt_on === "yes"
-                            enabledToggle: cc.st.bt === "1"
-                            onToggle: cc.act("timeout 3 bluetoothctl power " + (on ? "off" : "on"))
-                            onOpen: cc.open("bt")
-                        }
-                        Toggle {
-                            width: parent.width
-                            icon: "kdeconnect-tray-symbolic"
-                            fallbackIcon: "smartphone-symbolic"
-                            title: "AirDrop"
-                            subtitle: "KDE Connect"
-                            onToggle: Sys.detached("kdeconnect-app")
-                            onOpen: Sys.detached("kdeconnect-app")
-                        }
+                Column {
+                    spacing: 10
+                    Pill {
+                        width: main.col
+                        icon: cc.st.wifi_dev ? "network-wireless-symbolic" : "network-wired-symbolic"
+                        title: cc.st.wifi_dev ? "Wi‑Fi" : "Red"
+                        subtitle: cc.st.wifi_dev ? (cc.st.wifi_on === "enabled" ? (cc.st.wifi_dev.split(":")[1] || "Activado") : "Desactivado")
+                                                 : (cc.st.ethernet ? "Ethernet" : "Sin conexión")
+                        on: cc.st.wifi_dev ? cc.st.wifi_on === "enabled" : !!cc.st.ethernet
+                        onToggle: cc.st.wifi_dev ? cc.act("nmcli radio wifi " + (on ? "off" : "on")) : cc.ajustes("red")
+                        onOpen: cc.st.wifi_dev ? cc.open("wifi") : cc.ajustes("red")
+                    }
+                    Pill {
+                        width: main.col
+                        icon: "network-bluetooth-symbolic"
+                        title: "Bluetooth"
+                        subtitle: cc.st.bt === "1" ? (cc.st.bt_on === "yes" ? "Activado" : "Desactivado") : "No disponible"
+                        on: cc.st.bt_on === "yes"
+                        enabledToggle: cc.st.bt === "1"
+                        onToggle: cc.act("timeout 3 bluetoothctl power " + (on ? "off" : "on"))
+                        onOpen: cc.open("bt")
                     }
                 }
-                Column {
-                    spacing: 11
-                    Module {
-                        width: 135; height: 61
-                        BigButton {
-                            anchors.fill: parent
-                            glyph: "☾"
-                            title: "Concentra-\nción"
-                            on: cc.dnd
-                            onClicked: cc.open("concentracion")
+                // Música: carátula arriba, título y artista, y los tres controles abajo
+                Glass {
+                    id: musica
+                    width: main.col; height: 138
+                    radius: 30
+                    readonly property bool hay: !!cc.player
+                    readonly property bool playing: hay && cc.player.playbackStatus === Mpris.PlaybackStatus.Playing
+                    // clic en la carátula o el título: trae al frente la app que suena
+                    MouseArea {
+                        x: 0; y: 0; width: parent.width; height: 96
+                        enabled: musica.hay && cc.player.canRaise
+                        onClicked: { cc.player.Raise(); cc.close2() }
+                    }
+                    Rectangle {
+                        x: 16; y: 14
+                        width: 40; height: 40; radius: 8
+                        color: cc.player && cc.player.artUrl ? "transparent" : cc.off
+                        // esquinas redondeadas con máscara (clip recorta por el rectángulo, no por el radio)
+                        Image { id: caratula; anchors.fill: parent; visible: false; source: cc.player ? cc.player.artUrl : ""; fillMode: Image.PreserveAspectCrop; smooth: true; mipmap: true; sourceSize.width: 120 }
+                        Rectangle { id: caratulaMask; anchors.fill: parent; radius: 8; visible: false; antialiasing: true }
+                        GE.OpacityMask { anchors.fill: parent; source: caratula; maskSource: caratulaMask; visible: caratula.status === Image.Ready }
+                        Rectangle {
+                            anchors.centerIn: parent; width: 24; height: 24; radius: 6; color: "#FA2D48"
+                            visible: !cc.player || !cc.player.artUrl
+                            T { anchors.centerIn: parent; text: "♫"; color: "white"; font.pixelSize: 14 }
                         }
                     }
-                    Module {
-                        width: 135; height: 61
-                        BigButton {
-                            anchors.fill: parent
-                            plainIcon: "preferences-desktop-display-randr-symbolic"
-                            title: "Duplicar\npantalla"
-                            onClicked: { cc.act("dbus-send --session --type=method_call --dest=org.kde.kscreen.osdService /org/kde/kscreen/osdService org.kde.kscreen.osdService.showActionSelector"); cc.close2() }
-                        }
+                    Column {
+                        x: 16; y: 62
+                        width: parent.width - 30
+                        T { width: parent.width; text: cc.player && cc.player.track ? cc.player.track : "Sin reproducción"; font.weight: Font.DemiBold }
+                        T { width: parent.width; visible: !!(cc.player && cc.player.artist); text: cc.player ? cc.player.artist : ""; color: cc.fg2; font.pixelSize: 11 }
+                    }
+                    Row {
+                        anchors.horizontalCenter: parent.horizontalCenter
+                        y: parent.height - 38
+                        spacing: 10
+                        Transport { kind: "prev"; active: !!(cc.player && cc.player.canGoPrevious); onClicked: cc.player.Previous() }
+                        Transport { kind: musica.playing ? "pause" : "play"; big: true; active: musica.hay; onClicked: cc.player.PlayPause() }
+                        Transport { kind: "next"; active: !!(cc.player && cc.player.canGoNext); onClicked: cc.player.Next() }
                     }
                 }
             }
-            // Pantalla: una barra por monitor
-            Module {
-                width: 280
-                height: pantalla.implicitHeight + 19
+            Row {
+                spacing: 10
+                Pill {
+                    width: main.col
+                    icon: "kdeconnect-tray-symbolic"
+                    fallbackIcon: "smartphone-symbolic"
+                    title: "AirDrop"
+                    subtitle: "KDE Connect"
+                    on: true
+                    onToggle: { Sys.detached("kdeconnect-app"); cc.close2() }
+                    onOpen: { Sys.detached("kdeconnect-app"); cc.close2() }
+                }
+                // botones redondos: luz nocturna y duplicar pantalla
+                Row {
+                    spacing: main.col - 2 * 64
+                    RoundButton {
+                        icon: "night-light-symbolic"; fallbackIcon: "weather-clear-night-symbolic"
+                        on: cc.st.night === "true"
+                        onColor: "#FF9F0A"
+                        // KWin solo recarga la luz nocturna con el aviso de --notify (org.kde.KWin.reconfigure no la aplica)
+                        onClicked: cc.act("kwriteconfig6 --notify --file kwinrc --group NightColor --key Active " + (on ? "false" : "true"))
+                    }
+                    RoundButton {
+                        icon: "preferences-desktop-display-randr-symbolic"
+                        onClicked: { cc.act("dbus-send --session --type=method_call --dest=org.kde.kscreen.osdService /org/kde/kscreen/osdService org.kde.kscreen.osdService.showActionSelector"); cc.close2() }
+                    }
+                }
+            }
+            Row {
+                spacing: 10
+                // encendido, la píldora entera se vuelve blanca, como «Dark Mode On» en macOS
+                Pill {
+                    width: main.col
+                    icon: "contrast-symbolic"
+                    title: "Modo oscuro"
+                    subtitle: on ? "Activado" : "Desactivado"
+                    on: cc.st.scheme === "VitrumDark"
+                    white: on
+                    // toda la píldora cambia el modo, como en macOS (no tiene menú de detalle)
+                    onToggle: cc.act(cc.bin + "vitrum-modo " + (on ? "claro" : "oscuro") + " --aplicar")
+                    onOpen: toggle()
+                }
+                Pill {
+                    width: main.col
+                    icon: "weather-clear-night-symbolic"
+                    title: "Concentración"
+                    subtitle: cc.dnd ? "No molestar" : ""
+                    on: cc.dnd
+                    onToggle: cc.open("concentracion")
+                    onOpen: cc.open("concentracion")
+                }
+            }
+            // Pantalla: una barra por monitor, sol pequeño y sol grande a los lados
+            Glass {
+                width: main.width
+                height: pantalla.implicitHeight + 26
                 Column {
                     id: pantalla
-                    x: 10; y: 9
-                    width: parent.width - 20
+                    x: 16; y: 12
+                    width: parent.width - 32
                     spacing: 6
                     T { text: "Pantalla"; font.weight: Font.DemiBold }
                     Repeater {
@@ -190,11 +299,12 @@ Window {
                         Column {
                             required property var modelData
                             width: pantalla.width
-                            spacing: 3
+                            spacing: 2
                             T { visible: cc.st.disp.indexOf(";") > 0; width: parent.width; text: parent.modelData[1]; color: cc.fg2; font.pixelSize: 11 }
-                            CCSlider {
+                            SliderRow {
                                 width: parent.width
-                                glyph: "☀"
+                                lowIcon: "display-brightness-low-symbolic"
+                                highIcon: "display-brightness-high-symbolic"
                                 value: Number(parent.modelData[2] || 0)
                                 onMoved: (v) => cc.act("qdbus-qt6 org.kde.ScreenBrightness /org/kde/ScreenBrightness/" + parent.modelData[0]
                                                        + " org.kde.ScreenBrightness.Display.SetBrightness " + Math.round(v * Number(parent.modelData[3] || 100) / 100) + " 0")
@@ -203,66 +313,34 @@ Window {
                     }
                 }
             }
-            // Sonido: barra y botón de salida (abre la lista de salidas, como AirPlay en macOS)
-            Module {
-                width: 280; height: 61
+            // Sonido: barra entre altavoz bajo y alto, y botón de salida (abre la lista, como AirPlay en macOS)
+            Glass {
+                width: main.width; height: 76
                 HoverHandler { id: sonidoHover }
-                T { x: 10; y: 9; text: "Sonido"; font.weight: Font.DemiBold }
-                // salida actual y flecha › al pasar el ratón: abre la lista de salidas (altavoces, auriculares…)
+                T { x: 16; y: 12; text: "Sonido"; font.weight: Font.DemiBold }
+                // salida actual y flecha › al pasar el ratón
                 T {
-                    anchors.right: parent.right; anchors.rightMargin: 10; y: 9
-                    width: parent.width - 90; horizontalAlignment: Text.AlignRight
+                    anchors.right: parent.right; anchors.rightMargin: 16; y: 12
+                    width: parent.width - 100; horizontalAlignment: Text.AlignRight
                     visible: sonidoHover.hovered
                     text: (cc.st.sink && cc.st.sink !== "(null)" ? cc.st.sink + "  " : "") + "›"
                     color: cc.fg2; font.pixelSize: 11
                 }
-                MouseArea { x: 0; y: 0; width: parent.width; height: 28; onClicked: cc.open("sonido") }
-                CCSlider {
-                    x: 10; y: 30
-                    width: parent.width - 20 - 26 - 8
-                    glyph: cc.st.mute === "yes" ? "🔇" : "🔈"
+                MouseArea { x: 0; y: 0; width: parent.width; height: 32; onClicked: cc.open("sonido") }
+                SliderRow {
+                    x: 16; y: 40
+                    width: parent.width - 32 - 30 - 8
+                    lowIcon: cc.st.mute === "yes" ? "audio-volume-muted-symbolic" : "audio-volume-low-symbolic"
+                    highIcon: "audio-volume-high-symbolic"
                     value: cc.st.mute === "yes" ? 0 : Number(cc.st.vol || 0)
                     onMoved: (v) => cc.act("pactl set-sink-mute @DEFAULT_SINK@ 0; pactl set-sink-volume @DEFAULT_SINK@ " + Math.round(v) + "%")
                 }
-                Circle {
-                    x: parent.width - 10 - width; y: 27
-                    icon: "audio-speakers-symbolic"
-                    MouseArea { anchors.fill: parent; onClicked: cc.open("sonido") }
-                }
-            }
-            // Música
-            Module {
-                width: 280; height: 61
                 Rectangle {
-                    x: 10; anchors.verticalCenter: parent.verticalCenter
-                    width: 42; height: 42; radius: 6; clip: true
-                    color: cc.player && cc.player.artUrl ? "transparent" : cc.off
-                    Image { anchors.fill: parent; source: cc.player ? cc.player.artUrl : ""; fillMode: Image.PreserveAspectCrop; visible: status === Image.Ready }
-                    Rectangle {
-                        anchors.centerIn: parent; width: 20; height: 20; radius: 5; color: "#FA2D48"
-                        visible: !cc.player || !cc.player.artUrl
-                        T { anchors.centerIn: parent; text: "♫"; color: "white"; font.pixelSize: 13 }
-                    }
-                }
-                Column {
-                    x: 60; anchors.verticalCenter: parent.verticalCenter
-                    width: parent.width - 60 - 64
-                    T { width: parent.width; text: cc.player && cc.player.track ? cc.player.track : "Música"; font.weight: Font.DemiBold }
-                    T { width: parent.width; visible: !!(cc.player && cc.player.artist); text: cc.player ? cc.player.artist : ""; color: cc.fg2; font.pixelSize: 11 }
-                }
-                Row {
-                    anchors.right: parent.right; anchors.rightMargin: 14; anchors.verticalCenter: parent.verticalCenter
-                    spacing: 14
-                    T {
-                        text: cc.player && cc.player.playbackStatus === Mpris.PlaybackStatus.Playing ? "❚❚" : "▶"
-                        font.pixelSize: 16; color: cc.player ? cc.fg : cc.fg2
-                        MouseArea { anchors.fill: parent; anchors.margins: -6; enabled: !!cc.player; onClicked: cc.player.PlayPause() }
-                    }
-                    T {
-                        text: "▶▶"; font.pixelSize: 12; color: cc.player && cc.player.canGoNext ? cc.fg : cc.fg2
-                        anchors.verticalCenter: parent.verticalCenter
-                        MouseArea { anchors.fill: parent; anchors.margins: -6; enabled: !!(cc.player && cc.player.canGoNext); onClicked: cc.player.Next() }
-                    }
+                    x: parent.width - 16 - width; y: 38
+                    width: 28; height: 28; radius: 14
+                    color: cc.circleOff
+                    Kirigami.Icon { anchors.centerIn: parent; width: 15; height: 15; source: "audio-speakers-symbolic"; isMask: true; color: cc.fg }
+                    MouseArea { anchors.fill: parent; onClicked: cc.open("sonido") }
                 }
             }
         }
@@ -290,9 +368,10 @@ Window {
             Item {
                 visible: cc.view === "sonido"
                 width: parent.width; height: visible ? 30 : 0
-                CCSlider {
+                SliderRow {
                     x: 14; width: parent.width - 28; anchors.verticalCenter: parent.verticalCenter
-                    glyph: "🔈"
+                    lowIcon: cc.st.mute === "yes" ? "audio-volume-muted-symbolic" : "audio-volume-low-symbolic"
+                    highIcon: "audio-volume-high-symbolic"
                     value: cc.st.mute === "yes" ? 0 : Number(cc.st.vol || 0)
                     onMoved: (v) => cc.act("pactl set-sink-mute @DEFAULT_SINK@ 0; pactl set-sink-volume @DEFAULT_SINK@ " + Math.round(v) + "%")
                 }
@@ -411,15 +490,6 @@ Window {
         width: parent ? parent.width : 0; height: 11
         Rectangle { x: 14; width: parent.width - 28; height: 1; anchors.verticalCenter: parent.verticalCenter; color: cc.sep }
     }
-    // módulo medido en macOS sobre el material del panel: una sola línea de 1 px (negro al 25 % en oscuro) y
-    // relleno negro al 16 % (oscuro) o blanco al 35 % (claro); sin filo claro
-    component Module: Rectangle {
-        radius: 10
-        antialiasing: true
-        color: cc.dark ? Qt.rgba(0, 0, 0, 0.16) : Qt.rgba(1, 1, 1, 0.35)
-        border.width: 1
-        border.color: Qt.rgba(0, 0, 0, cc.dark ? 0.25 : 0.06)
-    }
     component Circle: Rectangle {
         property string icon: ""
         property string fallbackIcon: ""
@@ -441,54 +511,6 @@ Window {
         Rectangle { width: 20; height: 20; radius: 10; y: 1; x: sw.on ? sw.width - width - 1 : 1; color: "white"; Behavior on x { NumberAnimation { duration: 120 } } }
         MouseArea { anchors.fill: parent; onClicked: sw.toggled() }
     }
-    // fila de red: círculo (activa/desactiva) y texto (abre el detalle); al pasar el ratón aparece la flecha ›,
-    // como en macOS
-    component Toggle: Item {
-        id: tg
-        property string icon: ""
-        property string fallbackIcon: ""
-        property string title: ""
-        property string subtitle: ""
-        property bool on: false
-        property bool enabledToggle: true
-        signal toggle()
-        signal open()
-        height: 26
-        Circle {
-            icon: tg.icon; fallbackIcon: tg.fallbackIcon; on: tg.on; dim: !tg.enabledToggle
-            MouseArea { anchors.fill: parent; enabled: tg.enabledToggle; onClicked: tg.toggle() }
-        }
-        Column {
-            x: 34; anchors.verticalCenter: parent.verticalCenter
-            width: tg.width - 34 - (tgHover.hovered ? 14 : 0)
-            spacing: -1
-            T { width: parent.width; text: tg.title; font.weight: Font.DemiBold }
-            T { width: parent.width; text: tg.subtitle; color: cc.fg2; font.pixelSize: 11 }
-        }
-        T { visible: tgHover.hovered; anchors.right: parent.right; anchors.verticalCenter: parent.verticalCenter; text: "›"; font.pixelSize: 18; color: cc.fg2 }
-        HoverHandler { id: tgHover }
-        MouseArea { x: 30; width: tg.width - 30; height: tg.height; onClicked: tg.open() }
-    }
-    // módulo de 61 px: círculo (o icono suelto) a 10 px y texto de dos líneas a 44 px
-    component BigButton: Item {
-        id: bb
-        property string icon: ""
-        property string plainIcon: ""
-        property string glyph: ""
-        property string title: ""
-        property bool on: false
-        signal clicked()
-        Circle { visible: bb.plainIcon === ""; x: 10; anchors.verticalCenter: parent.verticalCenter; icon: bb.icon; glyph: bb.glyph; on: bb.on }
-        Kirigami.Icon { visible: bb.plainIcon !== ""; x: 12; anchors.verticalCenter: parent.verticalCenter; width: 22; height: 22; source: bb.plainIcon; isMask: true; color: cc.fg }
-        T {
-            x: 44; width: parent.width - 44 - 8
-            anchors.verticalCenter: parent.verticalCenter
-            text: bb.title; font.weight: Font.DemiBold
-            elide: Text.ElideNone; lineHeight: 0.95
-        }
-        MouseArea { anchors.fill: parent; onClicked: bb.clicked() }
-    }
-    // fila de los menús de detalle: círculo azul si está activa, texto, candado o dato a la derecha
     component ListRow: Item {
         id: lr
         property string icon: ""
@@ -532,34 +554,176 @@ Window {
         HoverHandler { id: lrHover }
         MouseArea { anchors.fill: parent; onClicked: lr.clicked() }
     }
-    component CCSlider: Item {
-        id: sl
-        property real value: 50
-        property string glyph: ""
+    // controles de música dibujados (los caracteres ▶ y ❚❚ cambian de tamaño y grosor según la fuente):
+    // reproducir y pausa grandes, anterior y siguiente con dos triángulos, como en macOS
+    component Transport: Item {
+        id: tr
+        property string kind: "play"        // play | pause | prev | next
+        property bool big: false
+        property bool active: true
+        signal clicked()
+        width: 30; height: 26
+        opacity: active ? 1 : 0.35
+        scale: trMouse.pressed ? 0.85 : 1
+        Behavior on scale { NumberAnimation { duration: 90 } }
+        Shape {
+            visible: tr.kind === "play"
+            anchors.centerIn: parent; anchors.horizontalCenterOffset: 1.5
+            width: 16; height: 18
+            preferredRendererType: Shape.CurveRenderer
+            ShapePath {
+                fillColor: cc.fg; strokeColor: cc.fg; strokeWidth: 1.5; joinStyle: ShapePath.RoundJoin
+                startX: 1; startY: 1
+                PathLine { x: 15; y: 9 }
+                PathLine { x: 1; y: 17 }
+                PathLine { x: 1; y: 1 }
+            }
+        }
+        Row {
+            visible: tr.kind === "pause"
+            anchors.centerIn: parent; spacing: 4.5
+            Repeater { model: 2; Rectangle { width: 5; height: 17; radius: 1.5; color: cc.fg } }
+        }
+        Shape {
+            visible: tr.kind === "prev" || tr.kind === "next"
+            anchors.centerIn: parent
+            width: 20; height: 12
+            // anterior: el mismo dibujo reflejado
+            transform: Scale { origin.x: 10; xScale: tr.kind === "prev" ? -1 : 1 }
+            preferredRendererType: Shape.CurveRenderer
+            ShapePath {
+                fillColor: cc.fg; strokeColor: cc.fg; strokeWidth: 1.2; joinStyle: ShapePath.RoundJoin
+                startX: 1; startY: 1
+                PathLine { x: 10; y: 6 }
+                PathLine { x: 1; y: 11 }
+                PathLine { x: 1; y: 1 }
+                PathMove { x: 10; y: 1 }
+                PathLine { x: 19; y: 6 }
+                PathLine { x: 10; y: 11 }
+                PathLine { x: 10; y: 1 }
+            }
+        }
+        MouseArea { id: trMouse; anchors.fill: parent; anchors.margins: -4; enabled: tr.active; onClicked: tr.clicked() }
+    }
+    // módulo de cristal de Tahoe (Pantalla, Sonido, Música)
+    component Glass: Rectangle {
+        radius: 26
+        antialiasing: true
+        color: cc.glass
+        border.width: 1
+        border.color: cc.glassEdge
+    }
+    // píldora de 64 px: círculo de 40 px (activa/desactiva) y texto (abre el detalle). Encendido: círculo blanco con
+    // el icono en color; white vuelve blanca la píldora entera (Modo oscuro)
+    component Pill: Rectangle {
+        id: pl
+        property string icon: ""
+        property string fallbackIcon: ""
+        property string title: ""
+        property string subtitle: ""
+        property bool on: false
+        property bool white: false
+        property bool enabledToggle: true
+        signal toggle()
+        signal open()
+        height: 64; radius: 32
+        antialiasing: true
+        color: white ? "#FFFFFF" : plHover.hovered ? cc.glassHover : cc.glass
+        border.width: white ? 0 : 1
+        border.color: cc.glassEdge
+        HoverHandler { id: plHover }
+        Rectangle {
+            x: 12; anchors.verticalCenter: parent.verticalCenter
+            width: 40; height: 40; radius: 20
+            color: pl.white ? Qt.rgba(0, 0, 0, 0.06) : pl.on ? "#FFFFFF" : cc.circleOff
+            opacity: pl.enabledToggle ? 1 : 0.5
+            scale: plCircle.pressed ? 0.9 : 1
+            Behavior on scale { NumberAnimation { duration: 90 } }
+            Kirigami.Icon {
+                anchors.centerIn: parent; width: 20; height: 20
+                source: pl.icon; fallback: pl.fallbackIcon; isMask: true
+                color: pl.white ? "#1D1D1F" : pl.on ? cc.accent : cc.fg
+            }
+            MouseArea { id: plCircle; anchors.fill: parent; enabled: pl.enabledToggle; onClicked: pl.toggle() }
+        }
+        Column {
+            x: 58; anchors.verticalCenter: parent.verticalCenter
+            width: pl.width - 58 - 12
+            spacing: -1
+            // los nombres en español son más largos que en macOS («Concentración»): la letra se reduce hasta 11 px antes de cortar
+            T { width: parent.width; text: pl.title; font.weight: Font.DemiBold; color: pl.white ? "#1D1D1F" : cc.fg; fontSizeMode: Text.HorizontalFit; minimumPixelSize: 11 }
+            T { width: parent.width; visible: pl.subtitle !== ""; text: pl.subtitle; font.pixelSize: 11; color: pl.white ? Qt.rgba(0, 0, 0, 0.5) : cc.fg2 }
+        }
+        MouseArea { x: 54; width: pl.width - 54; height: pl.height; onClicked: pl.open() }
+    }
+    // botón redondo de 64 px; encendido, blanco con el icono en color
+    component RoundButton: Rectangle {
+        id: rb
+        property string icon: ""
+        property string fallbackIcon: ""
+        property bool on: false
+        property color onColor: cc.accent
+        signal clicked()
+        width: 64; height: 64; radius: 32
+        antialiasing: true
+        color: on ? "#FFFFFF" : rbHover.hovered ? cc.glassHover : cc.glass
+        border.width: on ? 0 : 1
+        border.color: cc.glassEdge
+        scale: rbMouse.pressed ? 0.92 : 1
+        Behavior on scale { NumberAnimation { duration: 90 } }
+        HoverHandler { id: rbHover }
+        Kirigami.Icon {
+            anchors.centerIn: parent; width: 24; height: 24
+            source: rb.icon; fallback: rb.fallbackIcon; isMask: true
+            color: rb.on ? rb.onColor : cc.fg
+        }
+        MouseArea { id: rbMouse; anchors.fill: parent; onClicked: rb.clicked() }
+    }
+    // deslizador fino de Tahoe con un icono a cada lado; la barra engorda al pasar el ratón
+    component SliderRow: Item {
+        id: sr
+        property string lowIcon: ""
+        property string highIcon: ""
+        property alias value: thin.value
         signal moved(real v)
-        height: 20
+        height: 24
+        Kirigami.Icon { id: lo; anchors.verticalCenter: parent.verticalCenter; width: 14; height: 14; source: sr.lowIcon; isMask: true; color: cc.fg }
+        ThinSlider {
+            id: thin
+            x: 22; anchors.verticalCenter: parent.verticalCenter
+            width: sr.width - 22 - 28
+            onMoved: (v) => sr.moved(v)
+        }
+        Kirigami.Icon { anchors.right: parent.right; anchors.verticalCenter: parent.verticalCenter; width: 19; height: 19; source: sr.highIcon; isMask: true; color: cc.fg }
+    }
+    component ThinSlider: Item {
+        id: ts
+        property real value: 50
+        signal moved(real v)
+        height: 24
         property real shown: value
-        onValueChanged: if (!drag.pressed) shown = value
+        onValueChanged: if (!tsDrag.pressed) shown = value
+        readonly property bool grande: tsHover.hovered || tsDrag.pressed
+        HoverHandler { id: tsHover }
         Rectangle {
-            anchors.fill: parent; radius: height / 2
-            color: cc.dark ? Qt.rgba(1, 1, 1, 0.12) : Qt.rgba(0, 0, 0, 0.08)
-            border.width: cc.dark ? 0 : 0.5; border.color: Qt.rgba(0, 0, 0, 0.08)
+            id: track
+            anchors.verticalCenter: parent.verticalCenter
+            width: parent.width; height: ts.grande ? 9 : 5; radius: height / 2
+            Behavior on height { NumberAnimation { duration: 120 } }
+            color: cc.dark ? Qt.rgba(1, 1, 1, 0.18) : Qt.rgba(0, 0, 0, 0.12)
+            Rectangle {
+                width: Math.max(parent.height, parent.width * ts.shown / 100); height: parent.height; radius: height / 2
+                color: cc.dark ? "#FFFFFF" : Qt.rgba(0, 0, 0, 0.75)
+            }
         }
-        Rectangle { width: Math.max(height, sl.width * sl.shown / 100); height: parent.height; radius: height / 2; color: "white" }
-        Rectangle {
-            width: parent.height; height: parent.height; radius: height / 2
-            x: Math.max(0, sl.width * sl.shown / 100 - width)
-            color: "white"; border.width: 0.5; border.color: Qt.rgba(0, 0, 0, 0.2)
-        }
-        Text { x: 6; anchors.verticalCenter: parent.verticalCenter; text: sl.glyph; font.pixelSize: 11; color: "#6E6E73" }
         MouseArea {
-            id: drag
+            id: tsDrag
             anchors.fill: parent
-            function upd(mx) { sl.shown = Math.max(0, Math.min(100, mx / sl.width * 100)) }
+            function upd(mx) { ts.shown = Math.max(0, Math.min(100, mx / ts.width * 100)) }
             onPressed: (e) => upd(e.x)
-            onPositionChanged: (e) => { if (pressed) { upd(e.x); if (!liveTimer.running) liveTimer.start() } }
-            onReleased: { liveTimer.stop(); sl.moved(sl.shown) }
-            Timer { id: liveTimer; interval: 120; onTriggered: sl.moved(sl.shown) }
+            onPositionChanged: (e) => { if (pressed) { upd(e.x); if (!tsLive.running) tsLive.start() } }
+            onReleased: { tsLive.stop(); ts.moved(ts.shown) }
+            Timer { id: tsLive; interval: 120; onTriggered: ts.moved(ts.shown) }
         }
     }
 }

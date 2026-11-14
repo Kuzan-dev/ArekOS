@@ -24,9 +24,15 @@ QtObject {
         function onPreviewRequested(app) { dock.debugPreview(app) }
         function onControlCenterViewRequested(v) { if (!controlCenter.visible) { place(controlCenter); controlCenter.open2() } controlCenter.open(v) }
         function onControlCenterRequested() { later(() => { place(controlCenter); controlCenter.toggle() }) }
+        function onControlCenterMenuRequested(v, x) { later(() => { place(controlCenter); controlCenter.menu(v, x) }) }
         function onSearchRequested(text) { later(() => { place(spotlight); spotlight.search(text) }) }
     }
     property var dockOverLaunchpad: Binding { target: dock; property: "overLaunchpad"; value: launchpad.shown }
+    // lo que está abierto, para que su icono de la barra se resalte como en macOS Tahoe (org.vitrum.Shell.Abierto)
+    property var abierto: Binding {
+        target: ShellBus; property: "abierto"
+        value: !controlCenter.visible ? "" : controlCenter.menuMode ? controlCenter.view : "cc"
+    }
     // Pantalla principal (Ajustes → Pantallas): el dock vive en ella y Launchpad/Spotlight se abren en ella
     property var primary: null
     // Spotlight, Launchpad y el Centro de Control los coloca KWin en la pantalla activa

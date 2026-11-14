@@ -13,16 +13,18 @@ Page {
                 if (Sys.readConf(rc, ["Containments", c, "Applets", a], "plugin") === plugin) return [c, a]
         return null
     }
-    readonly property var clock: findApplet("org.kde.plasma.digitalclock")
+    // el reloj de Vitrum (estilo Tahoe) usa las mismas claves que el de KDE
+    readonly property var clock: findApplet("org.vitrum.calendario") || findApplet("org.kde.plasma.digitalclock")
     // Plasma 6: la bandeja está anidada en el panel (Containments/<panel>/Applets/<bandeja>)
     readonly property var tray: findApplet("org.kde.plasma.systemtray") || ["", ""]
     function trayList(key) { return Sys.readConf(rc, ["Containments", tray[0], "Applets", tray[1], "General"], key, "").split(",").filter(x => x) }
     property var enabledItems: trayList("extraItems")
 
     readonly property var controls: [
-        { id: "org.kde.plasma.networkmanagement", t: "Red", icon: "network-wireless-symbolic", c: "blue" },
+        // los widgets de red y sonido de KDE solo se listan si ya estaban en la bandeja: los sustituyen los iconos de Vitrum
+        { id: "org.kde.plasma.networkmanagement", t: "Red (widget de KDE)", icon: "network-wireless-symbolic", c: "blue", kde: true },
         { id: "org.kde.plasma.bluetooth", t: "Bluetooth", icon: "network-bluetooth-symbolic", c: "blue" },
-        { id: "org.kde.plasma.volume", t: "Sonido", icon: "audio-volume-high-symbolic", c: "pink" },
+        { id: "org.kde.plasma.volume", t: "Sonido (widget de KDE)", icon: "audio-volume-high-symbolic", c: "pink", kde: true },
         { id: "org.kde.plasma.battery", t: "Energía", icon: "battery-full-symbolic", c: "green" },
         { id: "org.kde.plasma.brightness", t: "Pantalla", icon: "brightness-high-symbolic", c: "blue" },
         { id: "org.kde.plasma.mediacontroller", t: "Reproduciendo", icon: "audio-speakers-symbolic", c: "pink" },
@@ -57,6 +59,11 @@ Page {
             Sys.detached(Sys.home() + "/.local/bin/vitrum-plasma-set", args)
         }
     }
+    // iconos propios de Wi‑Fi y Sonido (plasmoide org.vitrum.controles): se muestran u ocultan al momento, sin reiniciar Plasma
+    readonly property var vitrumControls: [
+        { key: "Wifi", t: "Wi‑Fi", icon: "network-wireless-symbolic", c: "blue" },
+        { key: "Sonido", t: "Sonido", icon: "audio-volume-high-symbolic", c: "pink" }
+    ]
     function clockConf(key, def) { return clock ? Sys.readConf(rc, ["Containments", clock[0], "Applets", clock[1], "Configuration", "Appearance"], key, def) : def }
 
     // estado real de la barra (Plasma lo da por su interfaz de scripts)
@@ -141,7 +148,21 @@ Page {
             }
         }
         Repeater {
-            model: p.controls
+            model: p.vitrumControls
+            RowItem {
+                id: vrow
+                property bool shown: Sys.readConf("vitrumrc", ["BarraMenus"], modelData.key, "true") !== "false"
+                title: modelData.t
+                hasCheck: true
+                checked: shown
+                tileIcon: modelData.icon
+                tileColor: Theme.tile[modelData.c]
+                onCheckToggled: (v) => { Sys.writeConf("vitrumrc", ["BarraMenus"], modelData.key, v ? "true" : "false"); shown = v }
+                Txt { text: vrow.shown ? "Mostrar en la barra" : "En el Centro de Control"; color: Theme.secondary }
+            }
+        }
+        Repeater {
+            model: p.controls.filter(c => !c.kde || p.enabledItems.indexOf(c.id) >= 0)
             RowItem {
                 title: modelData.t
                 hasCheck: true

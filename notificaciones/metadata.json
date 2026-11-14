@@ -1,0 +1,13 @@
+{
+    "KPlugin": {
+        "Id": "org.vitrum.notificaciones",
+        "Name": "Centro de Notificaciones",
+        "Description": "Campana de la barra de menús con las notificaciones en tarjetas de cristal, como en macOS Tahoe",
+        "Icon": "preferences-desktop-notification",
+        "Authors": [{ "Name": "Vitrum" }],
+        "License": "GPL-3.0",
+        "Version": "1.0"
+    },
+    "KPackageStructure": "Plasma/Applet",
+    "X-Plasma-API-Minimum-Version": "6.0"
+}

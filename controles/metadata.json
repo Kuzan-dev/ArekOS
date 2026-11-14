@@ -1,0 +1,13 @@
+{
+    "KPlugin": {
+        "Id": "org.vitrum.controles",
+        "Name": "Wi‑Fi y Sonido",
+        "Description": "Iconos de Wi‑Fi y Sonido de la barra de menús, con sus menús estilo macOS",
+        "Icon": "network-wireless",
+        "Authors": [{ "Name": "Vitrum" }],
+        "License": "GPL-3.0",
+        "Version": "1.0"
+    },
+    "KPackageStructure": "Plasma/Applet",
+    "X-Plasma-API-Minimum-Version": "6.0"
+}

@@ -94,7 +94,9 @@ if appmenu_panels:
 else:
     # Panel estándar de KDE (p. ej. instalación limpia): convertir el panel principal en la barra superior de macOS
     top = panels[0]
-    dock = panels[1] if len(panels) > 1 else None
+    # el panel escondido de la campana (paso 4) no es el panel inferior
+    _d = [c for c in panels[1:] if not find(rc, "org.kde.plasma.notifications", c)]
+    dock = _d[0] if _d else None
 
 # Asegurar que el panel superior esté arriba (location=3, formfactor=2)
 rc = set_key(rc, f"[Containments][{top}]", "location", "3")
@@ -129,7 +131,18 @@ if not find(rc, "org.kde.plasma.panelspacer", top):
     rc = set_key(rc, f"[Containments][{top}][Applets][{ps_id}]", "plugin", "org.kde.plasma.panelspacer")
     rc = set_key(rc, f"[Containments][{top}][Applets][{ps_id}]", "immutability", "1")
 
-# 2) Lupa de Spotlight y Centro de Control
+# 2) Campana del Centro de Notificaciones, iconos de Wi‑Fi y Sonido, lupa de Spotlight y Centro de Control
+# (si un reloj llegó a ser el Centro de Notificaciones, vuelve a ser un reloj con su configuración; paso 3g)
+for c, a in find(rc, "org.vitrum.centronotificaciones", top):
+    rc = set_key(rc, f"[Containments][{c}][Applets][{a}]", "plugin", "org.kde.plasma.digitalclock")
+if not find(rc, "org.vitrum.notificaciones", top):
+    nt = str(next_id(rc))
+    rc = set_key(rc, f"[Containments][{top}][Applets][{nt}]", "plugin", "org.vitrum.notificaciones")
+    rc = set_key(rc, f"[Containments][{top}][Applets][{nt}]", "immutability", "1")
+if not find(rc, "org.vitrum.controles", top):
+    ct = str(next_id(rc))
+    rc = set_key(rc, f"[Containments][{top}][Applets][{ct}]", "plugin", "org.vitrum.controles")
+    rc = set_key(rc, f"[Containments][{top}][Applets][{ct}]", "immutability", "1")
 if not find(rc, "org.vitrum.spotlight", top):
     sp = str(next_id(rc))
     rc = set_key(rc, f"[Containments][{top}][Applets][{sp}]", "plugin", "org.vitrum.spotlight")
@@ -153,16 +166,19 @@ if dock:
 for cont, sid in find(rc, "org.kde.plasma.marginsseparator", top):
     rc = del_applet(rc, cont, sid)
 
-# 3c) Orden exacto de la barra de menús: [logo, nombreapp, appmenu, panelspacer, systemtray, spotlight, centrocontrol, digitalclock]
+# 3c) Orden exacto de la barra de menús: [logo, nombreapp, appmenu, panelspacer, campana, systemtray, controles, spotlight, centrocontrol, reloj]
 ordered_plugins = [
     "org.vitrum.menuapple",
     "org.vitrum.nombreapp",
     "org.kde.plasma.appmenu",
     "org.kde.plasma.panelspacer",
+    "org.vitrum.notificaciones",
     "org.kde.plasma.systemtray",
+    "org.vitrum.controles",
     "org.vitrum.spotlight",
     "org.vitrum.centrocontrol",
     "org.kde.plasma.digitalclock",
+    "org.vitrum.calendario",
 ]
 order_ids = []
 for plug in ordered_plugins:
@@ -171,32 +187,31 @@ for plug in ordered_plugins:
         order_ids.append(found[0][1])
 rc = set_key(rc, f"[Containments][{top}][General]", "AppletOrder", ";".join(order_ids))
 
-# 3d) Bandeja mínima: red, volumen, brillo, Bluetooth… ya están en el Centro de Control.
-#     Quedan las notificaciones y los iconos de las apps; sin elementos ocultos no aparece la flecha.
+# 3d) Bandeja mínima: red, volumen, brillo, Bluetooth… ya están en el Centro de Control y las notificaciones en la
+#     campana de Vitrum (la de KDE va en un panel escondido, paso 4). Quedan los iconos de las apps, sin flecha.
 for h in list(groups(rc)):
     m = re.fullmatch(r"\[Containments\]\[(\d+)\]\[Applets\]\[(\d+)\]", h)
     if m:
         s_, e_ = groups(rc)[h]
         if re.search(r"^plugin=org.kde.plasma.systemtray$", rc[s_:e_], re.M):
             g = h + "[General]"
-            rc = set_key(rc, g, "extraItems", "org.kde.plasma.notifications")
+            rc = set_key(rc, g, "extraItems", "")
             rc = set_key(rc, g, "knownItems", ",".join([
                 "org.kde.plasma.notifications", "org.kde.kdeconnect", "org.kde.plasma.vault", "org.kde.kscreen",
                 "org.kde.plasma.battery", "org.kde.plasma.bluetooth", "org.kde.plasma.brightness",
                 "org.kde.plasma.cameraindicator", "org.kde.plasma.clipboard", "org.kde.plasma.devicenotifier",
                 "org.kde.plasma.keyboardindicator", "org.kde.plasma.keyboardlayout", "org.kde.plasma.manage-inputmethod",
                 "org.kde.plasma.mediacontroller", "org.kde.plasma.networkmanagement", "org.kde.plasma.printmanager",
-                "org.kde.plasma.volume", "org.kde.plasma.weather"]))
+                "org.kde.plasma.volume", "org.kde.plasma.weather",
+                # conocido para que Plasma no lo añada solo: el clic por permanencia (accesibilidad) no se usa
+                "org.kde.plasma.dwellclicker"]))
             rc = set_key(rc, g, "showAllItems", "true")
             base = h[:-1]
             for sub in [x for x in groups(rc) if x.startswith(base + "][Applets][")]:
                 m2 = re.match(re.escape(base) + r"\]\[Applets\]\[(\d+)\]", sub)
                 if not m2:
                     continue
-                head = base + "][Applets][" + m2.group(1) + "]"
-                hs, he = groups(rc).get(head, (0, 0))
-                if not re.search(r"^plugin=org.kde.plasma.notifications$", rc[hs:he], re.M):
-                    rc = del_group(rc, sub)
+                rc = del_group(rc, sub)
             rc = set_key(rc, g, "shownItems", "")
             rc = set_key(rc, g, "hiddenItems", "")
 
@@ -212,30 +227,58 @@ for key, val in (("_add panel", "false"), ("_context", "true"), ("_display_setti
 # 3f) Reloj como en macOS: misma letra que la barra de menús (no la escala automática, que la agranda)
 for cont, cid in find(rc, "org.kde.plasma.digitalclock", top):
     g = f"[Containments][{cont}][Applets][{cid}][Configuration][Appearance]"
-    for key, val in (("autoFontAndSize", "false"), ("fontFamily", "Inter"), ("fontSize", "10"), ("fontWeight", "400"),
+    for key, val in (("autoFontAndSize", "false"), ("fontFamily", "Inter"), ("fontSize", "10"), ("fontWeight", "600"),
                      ("boldText", "false"), ("showDate", "true"), ("dateFormat", "custom"),
                      ("customDateFormat", "ddd d MMM"), ("dateDisplayFormat", "BesideTime"), ("use24hFormat", "2")):
         rc = set_key(rc, g, key, val)
 
-# 4) Notificaciones con Super+N (applet anidado en la bandeja)
-for h in list(groups(rc)):
-    m = re.fullmatch(r"\[Containments\]\[(\d+)\]\[Applets\]\[(\d+)\]\[Applets\]\[(\d+)\]", h)
-    if m:
-        s, e = groups(rc)[h]
-        if re.search(r"^plugin=org.kde.plasma.notifications$", rc[s:e], re.M):
-            rc = del_group(rc, h + "[Configuration][Shortcuts]")
-            rc = set_key(rc, h + "[Shortcuts]", "global", "Meta+N")
+# 3g) Reloj de Vitrum como en macOS Tahoe («sáb 14 nov  11:21» en una línea, calendario al pulsar): el de KDE monta
+#     la fecha sobre la hora cuando van una al lado de la otra. Mismo applet y misma configuración, otro plugin.
+for cont, cid in find(rc, "org.kde.plasma.digitalclock", top):
+    rc = set_key(rc, f"[Containments][{cont}][Applets][{cid}]", "plugin", "org.vitrum.calendario")
+
+# 4) Campana de KDE en un panel escondido: es la que muestra las notificaciones emergentes (tiene que estar cargada),
+#    pero las notificaciones se abren desde la campana de Vitrum (org.vitrum.notificaciones), al estilo Tahoe. Panel
+#    vertical de un icono en el borde izquierdo, que se oculta solo (plasmashellrc, paso 4b); las emergentes salen
+#    arriba a la derecha (plasmanotifyrc, paso 4c). Super+N abre la lista de KDE.
+camp = [c for c in find_panels(rc) if c != top and find(rc, "org.kde.plasma.notifications", c)]
+if camp:
+    camp = camp[0]
+else:
+    camp = str(next_id(rc))
+    for key, val in (("activityId", ""), ("formfactor", "3"), ("immutability", "1"), ("lastScreen", "0"),
+                     ("location", "5"), ("plugin", "org.kde.panel"), ("wallpaperplugin", "org.kde.image")):
+        rc = set_key(rc, f"[Containments][{camp}]", key, val)
+    na = str(next_id(rc))
+    rc = set_key(rc, f"[Containments][{camp}][Applets][{na}]", "immutability", "1")
+    rc = set_key(rc, f"[Containments][{camp}][Applets][{na}]", "plugin", "org.kde.plasma.notifications")
+    rc = set_key(rc, f"[Containments][{camp}][General]", "AppletOrder", na)
+for c, a in find(rc, "org.kde.plasma.notifications", camp):
+    rc = set_key(rc, f"[Containments][{c}][Applets][{a}][Shortcuts]", "global", "Meta+N")
 with open(RC, "w", encoding="utf-8") as f:
     f.write(rc)
 
 # 4b) Altura (32 px) y barra pegada al borde (floating=0) en plasmashellrc
 ps = load(PS) if os.path.exists(PS) else ""
 ps = set_key(ps, f"[PlasmaViews][Panel {top}]", "floating", "0")
+# la barra va pegada, pero sus menús emergentes flotan separados con las cuatro esquinas redondeadas (Tahoe)
+ps = set_key(ps, f"[PlasmaViews][Panel {top}]", "floatingApplets", "1")
+# 4b') panel de la campana: pegado, del tamaño de su icono y oculto hasta que el puntero toque ese trozo del borde
+for key, val in (("floating", "0"), ("panelLengthMode", "1"), ("panelVisibility", "1")):
+    ps = set_key(ps, f"[PlasmaViews][Panel {camp}]", key, val)
+ps = set_key(ps, f"[PlasmaViews][Panel {camp}][Defaults]", "thickness", "32")
 ps = set_key(ps, f"[PlasmaViews][Panel {top}][Defaults]", "thickness", "32")
 for sub in [h for h in groups(ps) if h.startswith(f"[PlasmaViews][Panel {top}][Horizontal") or h.startswith(f"[PlasmaViews][Panel {top}][Vertical")]:
     ps = set_key(ps, sub, "thickness", "32")
 with open(PS, "w", encoding="utf-8") as f:
     f.write(ps)
+
+# 4c) Notificaciones emergentes arriba a la derecha (como macOS), no junto a la campana escondida
+nr = f"{HOME}/.config/plasmanotifyrc"
+n = load(nr) if os.path.exists(nr) else ""
+n = set_key(n, "[Notifications]", "PopupPosition", "TopRight")
+with open(nr, "w", encoding="utf-8") as f:
+    f.write(n)
 
 # 5) Atajos globales
 sc = load(SC) if os.path.exists(SC) else ""

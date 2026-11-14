@@ -28,6 +28,9 @@ PlasmoidItem {
             disconnectSource(source)
         }
         function run(cmd) { connectSource("bash -c '" + cmd.replace(/'/g, "'\\''") + "' #" + Date.now()) }
+        // las apps se abren en su propio grupo de procesos (scope de systemd): si cuelgan de plasmashell, Plasma las
+        // cierra al reiniciarse (y con ellas lo que estuvieran haciendo, como aplicar una opción de la barra)
+        function abrir(cmd) { run("setsid -f systemd-run --user --scope --collect --quiet " + cmd) }
         Component.onCompleted: connectSource("bash -c 'getent passwd $USER' #nombre")
     }
     // cambio rápido de usuario (bloquea esta sesión y abre la pantalla de inicio de sesión)
@@ -48,9 +51,10 @@ PlasmoidItem {
         Layout.minimumWidth: 34
         Layout.maximumWidth: 34
         onClicked: menu.openRelative()
+        // resalte en píldora mientras el menú está abierto, como el resto de iconos de la barra (Tahoe)
         Rectangle {
-            anchors.centerIn: parent; width: 30; height: 22; radius: 5
-            color: menu.status === PlasmaExtras.Menu.Open ? Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.15) : "transparent"
+            anchors.centerIn: parent; width: 30; height: 20; radius: 10
+            color: menu.status === PlasmaExtras.Menu.Open ? Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.2) : "transparent"
         }
         Kirigami.Icon {
             anchors.centerIn: parent
@@ -66,14 +70,14 @@ PlasmoidItem {
             visualParent: btn
             placement: PlasmaExtras.Menu.BottomPosedLeftAlignedPopup
             minimumWidth: 250
-            PlasmaExtras.MenuItem { text: "Acerca de este equipo"; onClicked: sh.run(root.bin + "vitrum-ajustes info") }
+            PlasmaExtras.MenuItem { text: "Acerca de este equipo"; onClicked: sh.abrir(root.bin + "vitrum-ajustes info") }
             PlasmaExtras.MenuItem { separator: true }
-            PlasmaExtras.MenuItem { text: "Ajustes del Sistema…"; onClicked: sh.run(root.bin + "vitrum-ajustes") }
-            PlasmaExtras.MenuItem { text: "App Store…"; onClicked: sh.run("plasma-discover") }
+            PlasmaExtras.MenuItem { text: "Ajustes del Sistema…"; onClicked: sh.abrir(root.bin + "vitrum-ajustes") }
+            PlasmaExtras.MenuItem { text: "App Store…"; onClicked: sh.abrir("plasma-discover") }
             PlasmaExtras.MenuItem { separator: true }
-            PlasmaExtras.MenuItem { text: "Ítems recientes"; onClicked: sh.run("dolphin recentlyused:/files") }
+            PlasmaExtras.MenuItem { text: "Ítems recientes"; onClicked: sh.abrir("dolphin recentlyused:/files") }
             PlasmaExtras.MenuItem { separator: true }
-            PlasmaExtras.MenuItem { text: "Forzar salida…\tCtrl+Esc"; onClicked: sh.run("plasma-systemmonitor --page-name Applications") }
+            PlasmaExtras.MenuItem { text: "Forzar salida…\tCtrl+Esc"; onClicked: sh.abrir("plasma-systemmonitor --page-name Applications") }
             PlasmaExtras.MenuItem { separator: true }
             PlasmaExtras.MenuItem { text: "Reposo"; onClicked: sh.run("systemctl suspend") }
             PlasmaExtras.MenuItem { text: "Reiniciar…"; onClicked: root.logout("promptReboot") }

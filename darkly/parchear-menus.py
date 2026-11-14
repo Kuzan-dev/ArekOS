@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
-"""Parche de Vitrum sobre Darkly (kstyle/darklystyle.cpp): texto desactivado de los menús como en macOS.
+"""Parches de Vitrum sobre Darkly (kstyle/): texto desactivado de los menús como en macOS y esquinas de los
+menús como en macOS Tahoe (4 px más redondeadas que el resto de controles, también en el desenfoque y la sombra).
 
 Darkly pinta las entradas desactivadas con el grupo Disabled del esquema, que KDE calcula difuminando el
 texto hacia el fondo OPACO de la vista (blanco en el modo claro). Con los menús translúcidos (MenuOpacity 55)
@@ -9,9 +10,46 @@ el fondo real queda mucho más oscuro (~175 sobre un fondo de escritorio oscuro)
 
 Uso: parchear-menus.py <ruta a darklystyle.cpp>   (idempotente)
 """
+import os
 import sys
 
 p = sys.argv[1]
+d = os.path.dirname(p)
+
+
+def parchear(ruta, marca, cambios):
+    """Aplica [(viejo, nuevo)] a un archivo si no tiene ya la marca (idempotente)."""
+    t = open(ruta).read()
+    if marca in t:
+        return
+    for viejo, nuevo in cambios:
+        assert t.count(viejo) == 1, f"no se encontró en {os.path.basename(ruta)}: {viejo[:60]}"
+        t = t.replace(viejo, nuevo)
+    open(ruta, "w").write(t)
+
+
+# Menús de Tahoe: radio de CornerRadius + 4 en el marco, en la región de desenfoque y en la sombra
+TAHOE = "// Vitrum: menús de Tahoe"
+parchear(os.path.join(d, "darklyhelper.cpp"), TAHOE, [(
+    """        QRectF frameRect(rect);
+        qreal radius(frameRadius(PenWidth::NoPen));
+
+        painter->setPen(Qt::NoPen);""",
+    """        QRectF frameRect(rect);
+        qreal radius(frameRadius(PenWidth::NoPen) + 4); // Vitrum: menús de Tahoe, 4 px más redondeados
+
+        painter->setPen(Qt::NoPen);""")])
+parchear(os.path.join(d, "darklyblurhelper.cpp"), TAHOE, [(
+    """        return roundedRegion(rect, StyleConfigData::cornerRadius() + 1, true, true, true, true);""",
+    """        return roundedRegion(rect, StyleConfigData::cornerRadius() + 5, true, true, true, true); // Vitrum: menús de Tahoe""")])
+parchear(os.path.join(d, "darklyshadowhelper.cpp"), TAHOE, [(
+    """    const qreal frameRadius = _helper.frameRadius();
+
+    BoxShadowRenderer shadowRenderer;""",
+    """    const qreal frameRadius = _helper.frameRadius() + 4; // Vitrum: menús de Tahoe (las sombras de Darkly son de menús)
+
+    BoxShadowRenderer shadowRenderer;""")])
+
 s = open(p).read()
 MARCA = "// Vitrum: texto desactivado"
 if MARCA in s:

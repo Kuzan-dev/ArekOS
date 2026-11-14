@@ -5,7 +5,9 @@
 t() { timeout "${T:-4}" "$@" 2>/dev/null; }
 case "$1" in
 wifi)
-    t nmcli -t -f IN-USE,SSID,SIGNAL,SECURITY dev wifi list --rescan auto \
+    # la misma red puede verse por varios puntos de acceso o bandas: la entrada en uso va primero para que sea
+    # la que queda al quitar los repetidos
+    t nmcli -t -f IN-USE,SSID,SIGNAL,SECURITY dev wifi list --rescan auto | LC_ALL=C sort -s -t: -k1,1r \
         | awk -F: '$2!="" && !seen[$2]++ {print ($1=="*"?1:0) "|" $2 "|" $3 "|" $4}' | sort -t'|' -k1,1r -k3,3nr | head -20
     ;;
 bt)

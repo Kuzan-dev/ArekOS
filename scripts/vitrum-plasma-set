@@ -3,6 +3,11 @@
 # Escribe en la configuración de los paneles de Plasma con plasmashell detenido (si no, lo sobrescribe
 # al salir) y lo vuelve a arrancar. "@tray" en la ruta se sustituye por "<panel>/Applets/<bandeja>".
 set -u
+# Al parar Plasma, systemd mata todo lo que cuelga de él (p. ej. Ajustes abierto desde la barra de menús, que
+# lanza este script): se relanza en una unidad propia para sobrevivir a la parada y volver a arrancarlo
+if [ -z "${VITRUM_DESACOPLADO:-}" ] && command -v systemd-run >/dev/null; then
+    exec systemd-run --user --collect --quiet --setenv=VITRUM_DESACOPLADO=1 "$(readlink -f "$0")" "$@"
+fi
 rc=plasma-org.kde.plasma.desktop-appletsrc
 f=~/.config/$rc
 # Plasma 6: la bandeja va anidada dentro del panel → "Containments/<panel>/Applets/<bandeja>"

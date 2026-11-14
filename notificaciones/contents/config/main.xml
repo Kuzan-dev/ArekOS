@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<kcfg xmlns="http://www.kde.org/standards/kcfg/1.0">
+  <kcfgfile name=""/>
+  <group name="General">
+    <!-- última vez que se abrió el centro: lo anterior cuenta como leído -->
+    <entry name="lastRead" type="DateTime"></entry>
+  </group>
+</kcfg>

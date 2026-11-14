@@ -68,7 +68,7 @@ mkdir -p \
 
 # Copiar código fuente a ~/.cache/vitrum-src para que el servicio de auto-recompilación
 # de vitrumblur ante actualizaciones de KWin tenga siempre las herramientas a mano
-cp -r "$REPO_DIR/ajustes" "$REPO_DIR/centro-control" "$REPO_DIR/decoracion" \
+cp -r "$REPO_DIR/ajustes" "$REPO_DIR/centro-control" "$REPO_DIR/notificaciones" "$REPO_DIR/calendario" "$REPO_DIR/controles" "$REPO_DIR/decoracion" \
       "$REPO_DIR/iconos" "$REPO_DIR/integracion" "$REPO_DIR/kwin-desenfoque" \
       "$REPO_DIR/menu-apple" "$REPO_DIR/nombre-app" "$REPO_DIR/scripts" \
       "$REPO_DIR/spotlight" "$REPO_DIR/tema-plasma" "$REPO_DIR/temas" \
@@ -163,12 +163,15 @@ cp -r "$REPO_DIR/ajustes/qml" "$HOME/.local/share/vitrum-ajustes/"
 
 for s in vitrum-modo vitrum-plasma-set vitrum-disposicion vitrum-esquemas vitrum-klassy \
          vitrum-bandeja vitrum-brillo vitrum-raton vitrum-pantalla-cambio \
-         vitrum-cc-estado vitrum-cc-detalle vitrum-bt vitrum-vista-rapida vitrum-desenfoque-construir vitrum-zen vitrum-steam vitrum-waywallen; do
+         vitrum-cc-estado vitrum-cc-detalle vitrum-barra-estado vitrum-bt vitrum-vista-rapida vitrum-desenfoque-construir vitrum-zen vitrum-steam vitrum-waywallen; do
     cp "$REPO_DIR/scripts/$s" "$HOME/.local/bin/$s"
     chmod +x "$HOME/.local/bin/$s"
 done
 
 for p_src_dst in "centro-control:org.vitrum.centrocontrol" \
+                 "controles:org.vitrum.controles" \
+                 "notificaciones:org.vitrum.notificaciones" \
+                 "calendario:org.vitrum.calendario" \
                  "menu-apple:org.vitrum.menuapple" \
                  "spotlight:org.vitrum.spotlight" \
                  "nombre-app:org.vitrum.nombreapp"; do

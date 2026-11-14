@@ -279,6 +279,25 @@ public:
     {
         if (!w)
             return;
+        applyBlur(w, roundedRegion(x, y, width, height, radius), contrast, intensity, saturation);
+    }
+    // varias piezas de cristal en una misma ventana (Spotlight de Tahoe: barra y resultados separados);
+    // cada elemento de rects es [x, y, ancho, alto, radio]
+    Q_INVOKABLE void setBlurRects(QQuickWindow *w, const QVariantList &rects, qreal contrast = 1.0, qreal intensity = 1.0,
+                                  qreal saturation = 1.5)
+    {
+        if (!w)
+            return;
+        QRegion region;
+        for (const QVariant &v : rects) {
+            const QVariantList r = v.toList();
+            if (r.size() >= 5)
+                region += roundedRegion(r[0].toReal(), r[1].toReal(), r[2].toReal(), r[3].toReal(), r[4].toReal());
+        }
+        applyBlur(w, region, contrast, intensity, saturation);
+    }
+    static QRegion roundedRegion(qreal x, qreal y, qreal width, qreal height, qreal radius)
+    {
         // Con el desenfoque de Vitrum (kwin-desenfoque) las esquinas las recorta KWin con una máscara suavizada de
         // esquina continua (superelipse p≈2,8, como en macOS) a partir del radio que la ventana indica en su título
         // ("…#r19"); la región solo tiene que cubrir esa forma con la misma curva continua:
@@ -296,7 +315,10 @@ public:
         path.lineTo(x, y + cr);
         path.cubicTo(x, y + cp, x + cp, y, x + cr, y);
         path.closeSubpath();
-        const QRegion region(path.toFillPolygon().toPolygon());
+        return QRegion(path.toFillPolygon().toPolygon());
+    }
+    static void applyBlur(QQuickWindow *w, const QRegion &region, qreal contrast, qreal intensity, qreal saturation)
+    {
         KWindowEffects::enableBlurBehind(w, true, region);
         // KWin 6.6 aplica esta matriz (saturación y contraste) dentro del propio desenfoque, con la misma región
         KWindowEffects::enableBackgroundContrast(w, true, contrast, intensity, saturation, region);
@@ -382,14 +404,20 @@ class ShellBus : public QObject
 {
     Q_OBJECT
     Q_CLASSINFO("D-Bus Interface", "org.vitrum.Shell")
+    // qué hay abierto ("", "cc", "wifi", "sonido"): lo fija el QML y lo leen los iconos de la barra para resaltarse
+    Q_PROPERTY(QString abierto MEMBER m_abierto)
 public:
     using QObject::QObject;
 public Q_SLOTS:
+    Q_SCRIPTABLE QString Abierto() const { return m_abierto; }
     Q_SCRIPTABLE void ToggleLaunchpad() { Q_EMIT launchpadRequested(); }
     Q_SCRIPTABLE void ToggleSpotlight() { Q_EMIT spotlightRequested(); }
     Q_SCRIPTABLE void ToggleControlCenter() { Q_EMIT controlCenterRequested(); }
     // abre el Centro de Control en una vista ("", wifi, bt, sonido, concentracion); pruebas sin ratón
     Q_SCRIPTABLE void ControlCenterView(const QString &view) { Q_EMIT controlCenterViewRequested(view); }
+    // abre una vista del Centro de Control como menú propio bajo un icono de la barra (Wi‑Fi, Sonido); x es el
+    // borde izquierdo del icono en coordenadas globales. Pedirlo otra vez con el menú abierto lo cierra
+    Q_SCRIPTABLE void ControlCenterMenu(const QString &view, int x) { Q_EMIT controlCenterMenuRequested(view, x); }
     Q_SCRIPTABLE void Search(const QString &text) { Q_EMIT searchRequested(text); }
     // muestra la vista previa de ventanas de una app del Dock (pruebas sin ratón)
     Q_SCRIPTABLE void PreviewApp(const QString &appId) { Q_EMIT previewRequested(appId); }
@@ -397,9 +425,13 @@ Q_SIGNALS:
     void previewRequested(const QString &appId);
     void controlCenterRequested();
     void controlCenterViewRequested(const QString &view);
+    void controlCenterMenuRequested(const QString &view, int x);
     void searchRequested(const QString &text);
     void launchpadRequested();
     void spotlightRequested();
+
+private:
+    QString m_abierto;
 };
 
 int main(int argc, char *argv[])

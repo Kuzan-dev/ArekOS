@@ -42,7 +42,7 @@ Page {
                     const rc = "plasma-org.kde.plasma.desktop-appletsrc"
                     for (const c of Sys.confGroups(rc, ["Containments"]))
                         for (const a of Sys.confGroups(rc, ["Containments", c, "Applets"]))
-                            if (Sys.readConf(rc, ["Containments", c, "Applets", a], "plugin") === "org.kde.plasma.digitalclock") return [c, a]
+                            if (Sys.readConf(rc, ["Containments", c, "Applets", a], "plugin").match(/^(org\.vitrum\.calendario|org\.kde\.plasma\.digitalclock)$/)) return [c, a]
                     return null
                 }
                 checked: clock ? Sys.readConf("plasma-org.kde.plasma.desktop-appletsrc", ["Containments", clock[0], "Applets", clock[1], "Configuration", "Appearance"], "use24hFormat", "2") === "2" : true

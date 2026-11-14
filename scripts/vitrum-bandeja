@@ -1,13 +1,18 @@
 #!/usr/bin/env python3
-"""vitrum-bandeja "id1,id2,…" — deja en la bandeja de la barra de menús solo esos widgets
-(las notificaciones siempre) y reinicia Plasma para aplicarlo."""
-import os, re, subprocess, sys, time
+"""vitrum-bandeja "id1,id2,…" — deja en la bandeja de la barra de menús solo esos widgets y reinicia Plasma para
+aplicarlo. La campana de KDE no va en la bandeja: está en un panel escondido (vitrum-disposicion, paso 4) y las
+notificaciones se abren desde la campana de Vitrum."""
+import os, re, shutil, subprocess, sys, time
+
+# Al parar Plasma, systemd mata todo lo que cuelga de él (p. ej. Ajustes abierto desde la barra de menús, que
+# lanza este script): se relanza en una unidad propia para sobrevivir a la parada y volver a arrancarlo
+if not os.environ.get("VITRUM_DESACOPLADO") and shutil.which("systemd-run"):
+    os.execvp("systemd-run", ["systemd-run", "--user", "--collect", "--quiet", "--setenv=VITRUM_DESACOPLADO=1",
+                              os.path.realpath(sys.argv[0])] + sys.argv[1:])
 
 HOME = os.path.expanduser("~")
 RC = f"{HOME}/.config/plasma-org.kde.plasma.desktop-appletsrc"
-items = [x for x in (sys.argv[1] if len(sys.argv) > 1 else "").split(",") if x]
-if "org.kde.plasma.notifications" not in items:
-    items.insert(0, "org.kde.plasma.notifications")
+items = [x for x in (sys.argv[1] if len(sys.argv) > 1 else "").split(",") if x and x != "org.kde.plasma.notifications"]
 
 def stop_start(fn):
     sysd = subprocess.run(["systemctl", "--user", "-q", "is-active", "plasma-plasmashell.service"]).returncode == 0

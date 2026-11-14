@@ -3,7 +3,9 @@ import QtQuick.Window
 import org.kde.layershell as LayerShell
 import org.kde.kirigami as Kirigami
 
-// Launchpad: cuadrícula de apps a pantalla completa (medidas de macOS a 1080p).
+// Launchpad: cuadrícula de apps a pantalla completa (medidas de macOS a 1080p), con los filtros por categoría de
+// macOS Tahoe bajo el buscador. Sin carpetas (por defecto) las páginas se llenan enteras: las apps del Dock primero
+// y después todas por orden alfabético.
 Window {
     id: lp
     visible: false
@@ -24,10 +26,11 @@ Window {
     readonly property int rows: 5
     readonly property int perPage: cols * rows
     property var allApps: []
-    // Carpetas automáticas por categoría (vitrumrc [Launchpad] Carpetas): las apps del dock quedan sueltas al
-    // principio, las demás van a la carpeta de su primera categoría reconocida; una carpeta con una sola app no
-    // se crea (la app queda suelta). Al buscar se muestran todas las apps sin carpetas.
-    property bool useFolders: true
+    // Carpetas automáticas por categoría (vitrumrc [Launchpad] Carpetas, desactivadas por defecto: dejaban las
+    // páginas medio vacías): las apps del dock quedan sueltas al principio, las demás van a la carpeta de su primera
+    // categoría reconocida; una carpeta con una sola app no se crea (la app queda suelta). Al buscar o filtrar se
+    // muestran las apps sin carpetas.
+    property bool useFolders: false
     property var grouped: []
     readonly property var folderDefs: [
         // Juegos primero: Steam y otros también se declaran «Network»
@@ -41,6 +44,29 @@ Window {
         { name: "Sistema", cats: ["Settings", "System", "Monitor", "PackageManager", "FileManager", "TerminalEmulator"] },
         { name: "Utilidades", cats: ["Utility", "Accessibility"] }
     ]
+    function categoria(a) {
+        const cats = (a.categories || "").split(";")
+        const d = folderDefs.find(d => d.cats.some(c => cats.indexOf(c) >= 0))
+        return d ? d.name : "Otras"
+    }
+    // filtros de Tahoe: solo las categorías que tienen apps, en el orden de folderDefs
+    readonly property var filtros: {
+        const usadas = allApps.map(a => a.cat)
+        return folderDefs.map(d => d.name).concat(["Otras"]).filter(n => usadas.indexOf(n) >= 0)
+    }
+    property string filtro: ""
+    onFiltroChanged: { page = 0; sel = -1; folder = null }
+    function siguienteFiltro(paso) {
+        const f = [""].concat(filtros)
+        filtro = f[(f.indexOf(filtro) + paso + f.length) % f.length]
+    }
+    // sin carpetas: las del Dock primero y el resto por orden alfabético
+    function ordenar(all) {
+        const pinned = Sys.readConf("vitrumrc", ["Dock"], "Launchers", "").split(",")
+            .filter(x => x.startsWith("applications:")).map(x => x.slice(13))
+        const primero = pinned.map(id => all.find(x => x.id === id)).filter(a => !!a)
+        return primero.concat(all.filter(a => pinned.indexOf(a.id) < 0))
+    }
     function group(all) {
         const pinned = Sys.readConf("vitrumrc", ["Dock"], "Launchers", "").split(",")
             .filter(x => x.startsWith("applications:")).map(x => x.slice(13))
@@ -62,7 +88,8 @@ Window {
     }
     readonly property var apps: {
         const q = search.text.trim().toLowerCase()
-        if (!q) return useFolders ? grouped : allApps
+        if (!q && filtro) return allApps.filter(a => a.cat === filtro)
+        if (!q) return grouped
         return allApps.filter(a => (a.name + " " + a.generic + " " + a.keywords).toLowerCase().indexOf(q) >= 0)
     }
     // carpeta abierta (panel sobre la cuadrícula) o null
@@ -95,10 +122,12 @@ Window {
 
     function toggle() { shown ? close2() : open2() }
     function open2() {
-        allApps = Sys.apps()
-        useFolders = Sys.readConf("vitrumrc", ["Launchpad"], "Carpetas", "true") !== "false"
-        grouped = useFolders ? group(allApps) : []
-        search.text = ""; page = 0; sel = -1; folder = null
+        const todas = Sys.apps()
+        for (const a of todas) a.cat = categoria(a)
+        allApps = todas
+        useFolders = Sys.readConf("vitrumrc", ["Launchpad"], "Carpetas", "false") === "true"
+        grouped = useFolders ? group(allApps) : ordenar(allApps)
+        search.text = ""; filtro = ""; page = 0; sel = -1; folder = null
         showFullScreen(); shown = true
         Qt.callLater(() => { updateBlur(); search.forceActiveFocus() })
     }
@@ -155,7 +184,7 @@ Window {
                 color: "white"; selectionColor: Theme.accent
                 font.family: Theme.font; font.pixelSize: 15 * lp.s
                 onTextChanged: { lp.page = 0; lp.sel = text.trim() ? 0 : -1 }
-                Keys.onEscapePressed: lp.folder ? lp.folder = null : text ? text = "" : lp.close2()
+                Keys.onEscapePressed: lp.folder ? lp.folder = null : text ? text = "" : lp.filtro ? lp.filtro = "" : lp.close2()
                 Keys.onReturnPressed: if (!lp.folder && lp.apps.length) lp.launch(lp.apps[Math.max(0, lp.sel)])
                 Keys.onEnterPressed: if (!lp.folder && lp.apps.length) lp.launch(lp.apps[Math.max(0, lp.sel)])
                 // sin búsqueda ni selección, izquierda/derecha cambian de página; si hay selección, la mueven
@@ -163,15 +192,44 @@ Window {
                 Keys.onLeftPressed: (e) => { if (lp.sel < 0 && !text) lp.page = Math.max(0, lp.page - 1); else if (lp.sel >= 0) lp.move(-1, 0); else e.accepted = false }
                 Keys.onDownPressed: lp.move(0, 1)
                 Keys.onUpPressed: lp.move(0, -1)
-                Keys.onTabPressed: lp.move(1, 0)
-                Keys.onBacktabPressed: lp.move(-1, 0)
+                // Tab y Mayús+Tab pasan por los filtros, como en Spotlight
+                Keys.onTabPressed: lp.siguienteFiltro(1)
+                Keys.onBacktabPressed: lp.siguienteFiltro(-1)
+            }
+        }
+
+        // Filtros por categoría (macOS Tahoe): píldoras bajo el buscador; pulsar la marcada la quita
+        Row {
+            id: chips
+            anchors.horizontalCenter: parent.horizontalCenter
+            anchors.top: field.bottom; anchors.topMargin: 14 * lp.s
+            spacing: 8 * lp.s
+            Repeater {
+                model: lp.filtros
+                Rectangle {
+                    required property string modelData
+                    readonly property bool sel: lp.filtro === modelData
+                    width: chipTxt.implicitWidth + 26 * lp.s; height: 26 * lp.s; radius: height / 2
+                    color: sel ? Qt.rgba(1, 1, 1, 0.32) : chipHover.hovered ? Qt.rgba(1, 1, 1, 0.16) : Qt.rgba(1, 1, 1, 0.09)
+                    border.width: 1; border.color: Qt.rgba(1, 1, 1, sel ? 0.35 : 0.20)
+                    HoverHandler { id: chipHover }
+                    Text {
+                        id: chipTxt
+                        anchors.centerIn: parent
+                        text: parent.modelData
+                        color: "white"
+                        font.family: Theme.font; font.pixelSize: 13 * lp.s; font.weight: parent.sel ? Font.DemiBold : Font.Normal
+                        renderType: Text.NativeRendering
+                    }
+                    MouseArea { anchors.fill: parent; onClicked: lp.filtro = parent.sel ? "" : parent.modelData }
+                }
             }
         }
 
         // Páginas de iconos
         Item {
             id: pagesArea
-            anchors { top: field.bottom; topMargin: 30 * lp.s; left: parent.left; right: parent.right; bottom: dots.top; bottomMargin: 20 * lp.s }
+            anchors { top: chips.bottom; topMargin: 22 * lp.s; left: parent.left; right: parent.right; bottom: dots.top; bottomMargin: 20 * lp.s }
             clip: true
             Row {
                 x: -lp.page * pagesArea.width
@@ -191,7 +249,7 @@ Window {
                                     required property var modelData
                                     required property int index
                                     readonly property bool selected: lp.sel === pg.index * lp.perPage + index
-                                    width: 215 * lp.s; height: 174 * lp.s
+                                    width: 215 * lp.s; height: 166 * lp.s
                                     // resaltado de la selección: recuadro redondeado translúcido que abarca icono y nombre,
                                     // dentro de la celda (el área de páginas recorta lo que sobresale)
                                     Rectangle {

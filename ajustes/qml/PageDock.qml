@@ -113,9 +113,9 @@ Page {
     Card {
         RowItem {
             title: "Agrupar las apps en carpetas"
-            subtitle: "Por categoría (Internet, Oficina, Juegos…); las apps del Dock quedan sueltas"
+            subtitle: "Por categoría (Internet, Oficina, Juegos…); las apps del Dock quedan sueltas. Sin carpetas, las categorías se eligen con los filtros"
             MacSwitch {
-                checked: Sys.readConf("vitrumrc", ["Launchpad"], "Carpetas", "true") !== "false"
+                checked: Sys.readConf("vitrumrc", ["Launchpad"], "Carpetas", "false") === "true"
                 onToggled: (v) => Sys.writeConf("vitrumrc", ["Launchpad"], "Carpetas", v ? "true" : "false")
             }
         }

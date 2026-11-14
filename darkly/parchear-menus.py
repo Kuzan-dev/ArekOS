@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
-"""Parches de Vitrum sobre Darkly (kstyle/): texto desactivado de los menús como en macOS y esquinas de los
-menús como en macOS Tahoe (4 px más redondeadas que el resto de controles, también en el desenfoque y la sombra).
+"""Parches de Vitrum sobre Darkly (kstyle/): texto desactivado de los menús como en macOS, esquinas de los
+menús como en macOS Tahoe (4 px más redondeadas que el resto de controles, también en el desenfoque y la sombra)
+y botones en píldora como en Tahoe.
 
 Darkly pinta las entradas desactivadas con el grupo Disabled del esquema, que KDE calcula difuminando el
 texto hacia el fondo OPACO de la vista (blanco en el modo claro). Con los menús translúcidos (MenuOpacity 55)
@@ -49,6 +50,27 @@ parchear(os.path.join(d, "darklyshadowhelper.cpp"), TAHOE, [(
     """    const qreal frameRadius = _helper.frameRadius() + 4; // Vitrum: menús de Tahoe (las sombras de Darkly son de menús)
 
     BoxShadowRenderer shadowRenderer;""")])
+
+# Botones de Tahoe: en píldora (radio de medio alto), también el brillo superior del modo oscuro. Lo usan los
+# botones normales, los desplegables y la parte del menú de los botones con menú
+PILDORA = "// Vitrum: botones en píldora"
+parchear(os.path.join(d, "darklyhelper.cpp"), PILDORA, [(
+    """    QRectF frameRect(rect.adjusted(Metrics::Frame_FrameWidth, Metrics::Frame_FrameWidth, -Metrics::Frame_FrameWidth, -Metrics::Frame_FrameWidth));
+    qreal radius(frameRadius() - qreal(Metrics::Frame_FrameWidth));
+
+    if (sunken) {""",
+    """    QRectF frameRect(rect.adjusted(Metrics::Frame_FrameWidth, Metrics::Frame_FrameWidth, -Metrics::Frame_FrameWidth, -Metrics::Frame_FrameWidth));
+    qreal radius(qMin(frameRect.width(), frameRect.height()) / 2); // Vitrum: botones en píldora, como en macOS Tahoe
+
+    if (sunken) {"""), (
+    """    if (isDarkTheme(palette) && enabled)
+        topHighlight(painter, frameRect, StyleConfigData::cornerRadius());
+
+    // pressed animation""",
+    """    if (isDarkTheme(palette) && enabled)
+        topHighlight(painter, frameRect, qRound(radius));
+
+    // pressed animation""")])
 
 s = open(p).read()
 MARCA = "// Vitrum: texto desactivado"
@@ -109,3 +131,4 @@ assert s.count(old) == 1, "no se encontró el bloque de texto de drawMenuItemCon
 s = s.replace(old, new)
 open(p, "w").write(s)
 print("parcheado")
+

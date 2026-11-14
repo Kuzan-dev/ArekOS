@@ -27,7 +27,7 @@ constexpr qreal TitleBarHeight = 28;
 constexpr qreal ButtonDiameter = 12;
 constexpr qreal ButtonPitch = 20;       // distancia entre centros
 constexpr qreal FirstButtonCenter = 14; // desde el borde izquierdo
-constexpr qreal CornerRadius = 16;    // ventanas de macOS Tahoe (Sequoia usaba 10)
+constexpr qreal CornerRadius = 20;    // ventanas de macOS Tahoe, como Ajustes de Vitrum (Sequoia usaba 10)
 constexpr qreal ResizeMargin = 6;       // zona invisible para redimensionar fuera de la ventana
 
 struct LightColors {

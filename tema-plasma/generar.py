@@ -200,8 +200,10 @@ def build(DST, scheme, title):
     dialog = Frame()
     # medido en macOS con el mismo fondo: menús y paneles ≈50 % de material sobre el desenfoque. Borde igual que el de
     # los paneles de vitrum-shell (MacPanel/Material.qml): filo interior blanco al 17 %, contorno exterior OUTLINE y
-    # sombra amplia; esquinas de 30 px como el Centro de Control (flotan separados de la barra: floatingApplets)
-    dialog.frame("", 30, 0.50 if BG == "#F6F6F6" else 0.45, 0.17, (10, 10, 10, 10), shadow=20)
+    # sombra amplia; esquinas de 24 px, como las notificaciones de Tahoe (flotan separados de la barra:
+    # floatingApplets). Con 30 la ✕ de las notificaciones emergentes, que KDE pone a distancia fija del borde, quedaba
+    # sobre la curva de la esquina
+    dialog.frame("", 24, 0.50 if BG == "#F6F6F6" else 0.45, 0.17, (12, 12, 12, 12), shadow=20)
     write(DST, "dialogs/background", dialog)
 
     # Selección de iconos (escritorio y listas de Plasma): como en macOS, un recuadro oscuro translúcido con filo

@@ -16,8 +16,9 @@ if [ "$modo" = auto ]; then
     h=$((10#$(date +%H)))
     if [ $h -ge 7 ] && [ $h -lt 19 ]; then modo=claro; else modo=oscuro; fi
 fi
-if [ "$modo" = oscuro ]; then esquema=VitrumDark iconos=WhiteSur-dark plasma=Vitrum-Oscuro fondo=WhiteSur-dark
-else esquema=VitrumLight iconos=WhiteSur-light plasma=Vitrum fondo=WhiteSur-light; fi
+# iconos de macOS Tahoe (heredan de WhiteSur lo que no traen)
+if [ "$modo" = oscuro ]; then esquema=VitrumDark iconos=MacTahoe-dark plasma=Vitrum-Oscuro fondo=WhiteSur-dark
+else esquema=VitrumLight iconos=MacTahoe-light plasma=Vitrum fondo=WhiteSur-light; fi
 
 actual=$(kreadconfig6 --file kdeglobals --group General --key ColorScheme)
 if [ -z "$actual" ]; then   # KDE omite el nombre si coincide con el del tema global: se deduce del color

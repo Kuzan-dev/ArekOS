@@ -74,8 +74,12 @@ cp -r "$REPO_DIR/ajustes" "$REPO_DIR/centro-control" "$REPO_DIR/notificaciones" 
       "$REPO_DIR/spotlight" "$REPO_DIR/tema-plasma" "$REPO_DIR/temas" \
       "$REPO_DIR/darkly" "$REPO_DIR/bloqueo" "$HOME/.cache/vitrum-src/"
 
-echo "==> [2/7] Descomprimiendo iconos WhiteSur, fuentes Inter/JetBrains Mono, esquemas y temas..."
+echo "==> [2/7] Descomprimiendo iconos MacTahoe y WhiteSur, fuentes Inter/JetBrains Mono, esquemas y temas..."
 zstd -dc "$REPO_DIR/paquetes/recursos.tar.zst" | tar -C "$HOME/.local/share" -xf -
+# iconos de macOS Tahoe (github.com/vinceliuice/MacTahoe-icon-theme, ya instalado con su install.sh). Heredan de
+# WhiteSur: lo que MacTahoe no trae (iconos elegidos con el editor de menús, iconos propios) se sigue viendo
+mkdir -p "$HOME/.local/share/icons"
+zstd -dc "$REPO_DIR/paquetes/mactahoe.tar.zst" | tar -C "$HOME/.local/share/icons" -xf -
 fc-cache -f "$HOME/.local/share/fonts" >/dev/null 2>&1 || true
 
 # Regenerar esquemas y temas de Plasma para asegurar rutas exactas del usuario actual
@@ -184,25 +188,33 @@ done
 cp "$REPO_DIR/iconos/"*.svg "$HOME/.local/share/icons/hicolor/scalable/apps/"
 # iconos de apps que WhiteSur no trae (Disney+, HBO Max, Haruna, Glassy Music…) con su forma y su sombra;
 # las esquinas van recortadas en el PNG incrustado porque QtSvg no aplica clipPath a <image>
-# iconos monocromos de la bandeja (como en macOS Tahoe): Discover y waywallen. La carpeta status de WhiteSur-dark
-# enlaza a la de WhiteSur; el icono de color de waywallen pasa a ser waywallen-color (Dock y Launchpad)
-W="$HOME/.local/share/icons/WhiteSur"
-if [ -d "$W/status/22" ]; then
-    for s in 16 22 24; do cp --remove-destination "$REPO_DIR/iconos-bandeja/"update-*.svg "$W/status/$s/"; done
-fi
+# iconos monocromos de la bandeja (como en macOS Tahoe): Discover y waywallen. Las carpetas status de WhiteSur-dark
+# y MacTahoe-dark enlazan a las de WhiteSur y MacTahoe (MacTahoe-light tiene las suyas); el icono de color de
+# waywallen pasa a ser waywallen-color (Dock y Launchpad)
+for t in WhiteSur MacTahoe MacTahoe-light; do
+    W="$HOME/.local/share/icons/$t"
+    if [ -d "$W/status/22" ]; then
+        for s in 16 22 24; do cp --remove-destination "$REPO_DIR/iconos-bandeja/"update-*.svg "$W/status/$s/"; done
+    fi
+done
 d="$HOME/.local/share/applications/org.waywallen.waywallen.desktop"
 for src in "$HOME/.local/share/flatpak/exports/share/applications/org.waywallen.waywallen.desktop" \
            /var/lib/flatpak/exports/share/applications/org.waywallen.waywallen.desktop; do
     [ -f "$d" ] || { [ -f "$src" ] && cp "$src" "$d"; }
 done
 [ -f "$d" ] && sed -i 's/^Icon=org\.waywallen\.waywallen$/Icon=waywallen-color/' "$d"
-for t in WhiteSur WhiteSur-dark; do
+# (las apps de MacTahoe-dark y MacTahoe-light enlazan a las de MacTahoe)
+for t in WhiteSur WhiteSur-dark MacTahoe; do
     # --remove-destination: en WhiteSur muchos nombres son enlaces (com.stremio.Stremio.svg → stremio.svg → mpv.svg);
     # sin él, cp escribiría a través del enlace y cambiaría también el icono de las otras apps
     [ -d "$HOME/.local/share/icons/$t/apps/scalable" ] && cp --remove-destination "$REPO_DIR/iconos-apps/"*.svg "$HOME/.local/share/icons/$t/apps/scalable/"
     [ -d "$HOME/.local/share/icons/$t/apps/scalable" ] && cp --remove-destination "$REPO_DIR/iconos-bandeja/org.waywallen.waywallen.svg" "$HOME/.local/share/icons/$t/apps/scalable/"
     # Qt usa icon-theme.cache: sin regenerarla los iconos nuevos no se ven hasta la próxima actualización del tema
     [ -f "$HOME/.local/share/icons/$t/icon-theme.cache" ] && gtk-update-icon-cache -f -q "$HOME/.local/share/icons/$t" 2>/dev/null || true
+done
+# MacTahoe va sin caché en el paquete: se genera aquí, con los iconos de Vitrum ya copiados
+for t in MacTahoe MacTahoe-dark MacTahoe-light; do
+    [ -d "$HOME/.local/share/icons/$t" ] && gtk-update-icon-cache -f -q "$HOME/.local/share/icons/$t" 2>/dev/null || true
 done
 
 # Pantalla de bloqueo estilo Sequoia (capa propia sobre la de KDE; «bash bloqueo/instalar.sh --quitar» la quita)

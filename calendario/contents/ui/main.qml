@@ -5,7 +5,7 @@ import org.kde.plasma.core as PlasmaCore
 import org.kde.plasma.plasma5support as P5Support
 import org.kde.kirigami as Kirigami
 
-// Reloj de la barra de menús como en macOS Tahoe: «sáb 14 nov  11:21» en una línea, en seminegrita, y al
+// Reloj de la barra de menús como en macOS Tahoe: «sáb 14 nov. 11:21» en una línea, en seminegrita, y al
 // pulsarlo el widget de calendario (mes en rojo, hoy en un círculo rojo). Sustituye al reloj de KDE, que con la
 // fecha al lado de la hora la monta sobre ella. Usa sus mismas claves (grupo Appearance), así que conserva su
 // configuración; se cambia en clic derecho → Configurar… o en Ajustes → Barra de menús → Opciones del reloj.
@@ -19,10 +19,19 @@ PlasmoidItem {
     // ── Fecha y hora ───────────────────────────────────────────────────────
     property date now: new Date()
     Timer { interval: 1000; repeat: true; running: true; triggeredOnStart: true; onTriggered: root.now = new Date() }
-    readonly property string hora: Qt.formatTime(now, cfg.use24hFormat === 0 ? (cfg.showSeconds === 2 ? "h:mm:ss AP" : "h:mm AP")
-                                                                             : (cfg.showSeconds === 2 ? "HH:mm:ss" : "HH:mm"))
-    // sin los puntos que Qt pone en las abreviaturas («sáb.» → «sáb»), como en macOS
-    readonly property string fecha: cfg.showDate ? Qt.locale().toString(now, cfg.customDateFormat || "ddd d MMM").replace(/\./g, "") : ""
+    readonly property string hora: textoHora(now)
+    readonly property string fecha: cfg.showDate ? textoFecha(now, cfg.customDateFormat || "ddd d MMM") : ""
+    // como en macOS: «sáb 14 nov. 11:58 a.m.» (el día abreviado sin punto, el mes con punto y a.m./p.m. en minúsculas)
+    function textoFecha(d, f) {
+        const dia = Qt.locale().dayName(d.getDay(), Locale.ShortFormat).replace(/\./g, "")
+        const mes = Qt.locale().monthName(d.getMonth(), Locale.ShortFormat).replace(/\./g, "") + "."
+        return Qt.locale().toString(d, f.replace(/dddd|ddd|MMMM|MMM/g, t => t === "ddd" ? "'" + dia + "'" : t === "MMM" ? "'" + mes + "'" : t))
+    }
+    function textoHora(d) {
+        const seg = cfg.showSeconds === 2
+        if (cfg.use24hFormat !== 0) return Qt.formatTime(d, seg ? "HH:mm:ss" : "HH:mm")
+        return Qt.formatTime(d, seg ? "h:mm:ss" : "h:mm") + (d.getHours() < 12 ? " a.m." : " p.m.")
+    }
 
     // ── Colores (sobre el fondo de los menús emergentes de Plasma) ───────────
     readonly property color fg: Kirigami.Theme.textColor

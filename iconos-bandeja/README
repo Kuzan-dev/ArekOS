@@ -1,0 +1,4 @@
+Iconos monocromos de la bandeja (como en macOS Tahoe), con el color del texto del esquema (ColorScheme-Text):
+- update-*.svg: notificador de Discover. Van a WhiteSur/status/{16,22,24}.
+- org.waywallen.waywallen.svg: waywallen. Va a WhiteSur/apps/scalable; el icono de color de la app se llama
+  waywallen-color (iconos-apps/) y el .desktop local apunta a él, así el Dock y el Launchpad siguen en color.

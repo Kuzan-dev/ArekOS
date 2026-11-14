@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 16 16">
+<style id="current-color-scheme" type="text/css">.ColorScheme-Text { color:#dedede; }</style>
+<path class="ColorScheme-Text" fill="currentColor" fill-rule="evenodd" d="M4 2.5h8A2.5 2.5 0 0 1 14.5 5v6a2.5 2.5 0 0 1-2.5 2.5H4A2.5 2.5 0 0 1 1.5 11V5A2.5 2.5 0 0 1 4 2.5zM4 4a1 1 0 0 0-1 1v6a1 1 0 0 0 1 1h8a1 1 0 0 0 1-1V5a1 1 0 0 0-1-1z"/>
+<path class="ColorScheme-Text" fill="currentColor" d="M3.6 11.2l3-3.4 2 2.1 1.4-1.4 2.4 2.7z"/>
+<circle class="ColorScheme-Text" fill="currentColor" cx="10.6" cy="6.3" r="1.1"/>
+</svg>

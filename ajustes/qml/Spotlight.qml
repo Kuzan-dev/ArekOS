@@ -31,58 +31,96 @@ Window {
     function search(text) { if (!visible) open2(); query.text = text }
     function updateBlur() {
         if (!visible) return
-        const piezas = [[box.x, box.y, box.width, box.height, box.radius]]
-        if (lista.visible) piezas.push([lista.x, lista.y, lista.width, lista.height, lista.radius])
-        Sys.setBlurRects(sp, piezas, Material.contrast, Material.intensity(box.radius), Material.saturation)
+        Sys.setBlur(sp, box.x, box.y, box.width, box.height, box.radius, Material.contrast, Material.intensity(box.radius), Material.saturation)
     }
     onWidthChanged: Qt.callLater(updateBlur)
     onHeightChanged: Qt.callLater(updateBlur)
 
     MouseArea { anchors.fill: parent; onClicked: sp.close2() }
 
-    // como en macOS Tahoe: la barra es una píldora de cristal y los resultados salen en un panel aparte, debajo
+    // como en macOS Tahoe: vacía es una píldora de cristal; al escribir crece hacia abajo en un solo panel con el
+    // campo arriba, una fila de filtros por categoría y la lista de resultados (filas de 48 px con el detalle debajo)
+    readonly property bool abierto: hasQuery && results.count > 0
+    readonly property real alturaLista: Math.min(results.contentHeight, 9 * 48)
     MacPanel {
         id: box
         width: 680
-        height: 56
+        height: sp.abierto ? 56 + 1 + 44 + sp.alturaLista + 10 : 56
         x: (parent.width - width) / 2
         y: Math.round(parent.height * 0.20)
         radius: 28
         onXChanged: Qt.callLater(sp.updateBlur)
         onYChanged: Qt.callLater(sp.updateBlur)
+        onHeightChanged: Qt.callLater(sp.updateBlur)
         MouseArea { anchors.fill: parent }   // no cerrar al hacer clic dentro
 
-        Magnifier { x: 21; anchors.verticalCenter: parent.verticalCenter; size: 20; color: Theme.secondary }
+        Magnifier { x: 21; y: (56 - height) / 2; size: 20; color: Theme.secondary }
         TextInput {
             id: query
             x: 54; width: parent.width - 54 - 24
-            anchors.verticalCenter: parent.verticalCenter
+            height: 56
+            verticalAlignment: TextInput.AlignVCenter
             font.family: Theme.font; font.pixelSize: 22; font.weight: Font.Light
             color: Theme.text; selectionColor: Theme.accent
             Text { visible: !query.text; text: "Búsqueda Spotlight"; color: Theme.tertiary; font: query.font; anchors.verticalCenter: parent.verticalCenter }
             Keys.onEscapePressed: sp.close2()
             Keys.onDownPressed: results.incrementCurrentIndex()
             Keys.onUpPressed: results.decrementCurrentIndex()
+            Keys.onTabPressed: sp.siguienteCategoria(1)
+            Keys.onBacktabPressed: sp.siguienteCategoria(-1)
             Keys.onReturnPressed: sp.runCurrent()
             Keys.onEnterPressed: sp.runCurrent()
         }
-    }
+        Rectangle { visible: sp.abierto; x: 18; y: 56; width: parent.width - 36; height: 1; color: Theme.separator }
 
-    MacPanel {
-        id: lista
-        visible: sp.hasQuery && results.count > 0
-        width: box.width
-        height: Math.min(results.contentHeight + 16, 460)
-        x: box.x
-        y: box.y + box.height + 8
-        radius: 24
-        onVisibleChanged: Qt.callLater(sp.updateBlur)
-        onHeightChanged: Qt.callLater(sp.updateBlur)
-        MouseArea { anchors.fill: parent }
+        // filtros: las categorías que hay en los resultados; al pulsar una se salta a su primer resultado
+        Instantiator {
+            id: filas
+            model: rmodel
+            delegate: QtObject { readonly property string cat: model.category }
+            // objectAt no avisa de cambios: rev obliga a recalcular las categorías
+            property int rev: 0
+            onObjectAdded: rev++
+            onObjectRemoved: rev++
+        }
+        readonly property var categorias: {
+            filas.rev
+            const out = []
+            for (let i = 0; i < filas.count; i++) { const f = filas.objectAt(i); if (f && out.indexOf(f.cat) < 0) out.push(f.cat) }
+            return out
+        }
+        readonly property string actual: results.currentItem ? results.currentItem.model.category : ""
+        Flickable {
+            visible: sp.abierto
+            x: 14; y: 57; width: parent.width - 28; height: 44
+            contentWidth: chips.width; clip: true
+            boundsBehavior: Flickable.StopAtBounds
+            Row {
+                id: chips
+                anchors.verticalCenter: parent.verticalCenter
+                spacing: 6
+                Repeater {
+                    model: box.categorias
+                    Rectangle {
+                        required property string modelData
+                        readonly property bool sel: modelData === box.actual
+                        height: 28; radius: 14
+                        width: chipTxt.implicitWidth + 26
+                        color: sel ? (Theme.dark ? Qt.rgba(1, 1, 1, 0.22) : Qt.rgba(0, 0, 0, 0.12))
+                                   : chipHover.hovered ? Theme.controlPressed : Theme.control
+                        HoverHandler { id: chipHover }
+                        Txt { id: chipTxt; anchors.centerIn: parent; text: parent.modelData; font.pixelSize: 13 }
+                        MouseArea { anchors.fill: parent; onClicked: sp.irACategoria(parent.modelData) }
+                    }
+                }
+            }
+        }
 
         ListView {
             id: results
-            anchors { fill: parent; topMargin: 6; bottomMargin: 10 }
+            visible: sp.abierto
+            x: 0; y: 56 + 1 + 44
+            width: parent.width; height: sp.alturaLista
             clip: true
             boundsBehavior: Flickable.StopAtBounds
             highlightMoveDuration: 0
@@ -94,26 +132,23 @@ Window {
                 onModelReset: results.currentIndex = 0
                 onRowsInserted: if (results.currentIndex < 0) results.currentIndex = 0
             }
-            section.property: "category"
-            section.delegate: Item {
-                required property string section
-                width: results.width; height: 26
-                Txt { x: 22; anchors.bottom: parent.bottom; anchors.bottomMargin: 4; text: parent.section; font.pixelSize: 11; font.weight: Font.DemiBold; color: Theme.secondary }
-            }
             delegate: Item {
                 id: row
                 required property var model
                 required property int index
                 readonly property bool sel: ListView.isCurrentItem
-                width: results.width; height: 36
-                Rectangle { anchors.fill: parent; anchors.leftMargin: 10; anchors.rightMargin: 10; radius: 10; color: row.sel ? Theme.accent : "transparent" }
-                Kirigami.Icon { id: ri; x: 20; anchors.verticalCenter: parent.verticalCenter; width: 24; height: 24; source: row.model.decoration }
-                Txt {
-                    anchors.left: ri.right; anchors.leftMargin: 10; anchors.right: parent.right; anchors.rightMargin: 22
+                width: results.width; height: 48
+                // selección de Tahoe: cristal claro, no el color de acento
+                Rectangle {
+                    anchors.fill: parent; anchors.leftMargin: 10; anchors.rightMargin: 10; radius: 12
+                    color: row.sel ? (Theme.dark ? Qt.rgba(1, 1, 1, 0.14) : Qt.rgba(0, 0, 0, 0.08)) : "transparent"
+                }
+                Kirigami.Icon { id: ri; x: 22; anchors.verticalCenter: parent.verticalCenter; width: 32; height: 32; source: row.model.decoration }
+                Column {
+                    anchors.left: ri.right; anchors.leftMargin: 12; anchors.right: parent.right; anchors.rightMargin: 24
                     anchors.verticalCenter: parent.verticalCenter
-                    textFormat: Text.StyledText
-                    text: row.model.display + (row.model.subtext ? "<font color='" + (row.sel ? "#D8E6FF" : Theme.secondary) + "'> — " + row.model.subtext + "</font>" : "")
-                    color: row.sel ? "white" : Theme.text
+                    Txt { width: parent.width; text: row.model.display; font.pixelSize: 15 }
+                    Txt { width: parent.width; visible: !!row.model.subtext; text: row.model.subtext || ""; font.pixelSize: 12; color: Theme.secondary }
                 }
                 MouseArea {
                     anchors.fill: parent; hoverEnabled: true
@@ -122,6 +157,19 @@ Window {
                 }
             }
         }
+    }
+    function irACategoria(cat) {
+        for (let i = 0; i < filas.count; i++) {
+            const f = filas.objectAt(i)
+            if (f && f.cat === cat) { results.currentIndex = i; results.positionViewAtIndex(i, ListView.Beginning); return }
+        }
+    }
+    // Tab y Mayús+Tab pasan a la categoría siguiente o anterior
+    function siguienteCategoria(paso) {
+        const c = box.categorias
+        if (c.length === 0) return
+        const i = c.indexOf(box.actual)
+        irACategoria(c[(i + paso + c.length) % c.length])
     }
     function runCurrent() {
         if (results.count === 0) return

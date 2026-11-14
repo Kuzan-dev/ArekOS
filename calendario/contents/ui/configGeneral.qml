@@ -19,10 +19,11 @@ KCM.SimpleKCM {
 
     // formatos de fecha (el primero es el de macOS)
     readonly property var formatos: ["ddd d MMM", "d MMM", "dddd d 'de' MMMM", "dd/MM/yyyy", "yyyy-MM-dd"]
-    // las mismas abreviaturas que el reloj (main.qml): «sáb», «nov.»
+    // las mismas abreviaturas que el reloj (main.qml): «Sáb», «nov.»
     function ejemplo(f) {
         const d = new Date()
-        const dia = Qt.locale().dayName(d.getDay(), Locale.ShortFormat).replace(/\./g, "")
+        const corto = Qt.locale().dayName(d.getDay(), Locale.ShortFormat).replace(/\./g, "")
+        const dia = corto.charAt(0).toUpperCase() + corto.slice(1)
         const mes = Qt.locale().monthName(d.getMonth(), Locale.ShortFormat).replace(/\./g, "") + "."
         return Qt.locale().toString(d, f.replace(/dddd|ddd|MMMM|MMM/g, t => t === "ddd" ? "'" + dia + "'" : t === "MMM" ? "'" + mes + "'" : t))
     }
@@ -45,7 +46,7 @@ KCM.SimpleKCM {
 
         QQC2.ComboBox {
             Kirigami.FormData.label: "Hora:"
-            model: ["24 horas (" + Qt.formatTime(new Date(), "HH:mm") + ")", "12 horas (" + Qt.formatTime(new Date(), "h:mm") + (new Date().getHours() < 12 ? " a.m.)" : " p.m.)")]
+            model: ["24 horas (" + Qt.formatTime(new Date(), "HH:mm") + ")", "12 horas (" + ((new Date().getHours() % 12) || 12) + Qt.formatTime(new Date(), ":mm") + (new Date().getHours() < 12 ? " a. m.)" : " p. m.)")]
             currentIndex: cfg_use24hFormat === 0 ? 1 : 0
             onActivated: (i) => cfg_use24hFormat = i === 1 ? 0 : 2
         }

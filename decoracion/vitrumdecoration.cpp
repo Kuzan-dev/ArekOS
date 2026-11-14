@@ -27,7 +27,7 @@ constexpr qreal TitleBarHeight = 28;
 constexpr qreal ButtonDiameter = 12;
 constexpr qreal ButtonPitch = 20;       // distancia entre centros
 constexpr qreal FirstButtonCenter = 14; // desde el borde izquierdo
-constexpr qreal CornerRadius = 10;
+constexpr qreal CornerRadius = 16;    // ventanas de macOS Tahoe (Sequoia usaba 10)
 constexpr qreal ResizeMargin = 6;       // zona invisible para redimensionar fuera de la ventana
 
 struct LightColors {
@@ -185,10 +185,11 @@ void Decoration::recalculate()
 
 void Decoration::updateShadow()
 {
-    // Sombra de macOS: amplia y suave, desplazada hacia abajo; más tenue en ventanas inactivas
+    // Sombra de macOS Tahoe: amplia y suave, desplazada hacia abajo; la ventana activa destaca más, las inactivas
+    // quedan tenues
     const bool active = window()->isActive();
-    const int spread = active ? 46 : 32;
-    const qreal offsetY = active ? 16 : 10;
+    const int spread = active ? 54 : 32;
+    const qreal offsetY = active ? 20 : 10;
     const qreal alpha = active ? (isDark() ? 0.55 : 0.32) : (isDark() ? 0.40 : 0.20);
     const QSize box(2 * int(CornerRadius) + 2, 2 * int(CornerRadius) + 2);
     QImage img(box + QSize(2 * spread, 2 * spread), QImage::Format_ARGB32_Premultiplied);

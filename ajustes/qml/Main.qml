@@ -15,10 +15,12 @@ Window {
     color: "transparent"
 
     // Tahoe: la barra lateral es un panel de cristal flotante dentro de la ventana, a 8 px de los bordes
-    readonly property int winRadius: 20
+    // maximizada o a pantalla completa, las esquinas de la ventana son rectas (la barra lateral sigue flotando)
+    readonly property bool llena: visibility === Window.Maximized || visibility === Window.FullScreen
+    readonly property int winRadius: llena ? 0 : 20
     readonly property int sidebarWidth: 220
     readonly property int sbMargin: 8
-    readonly property int sbRadius: winRadius - sbMargin + 2
+    readonly property int sbRadius: 14
 
     // Secciones (id, título, icono, color, palabras clave para buscar y la frase de su cabecera)
     readonly property var sections: [
@@ -108,7 +110,9 @@ Window {
         id: bg
         anchors.fill: parent
         property color fill: Theme.windowBg
+        readonly property int radio: win.winRadius
         onFillChanged: requestPaint()
+        onRadioChanged: requestPaint()
         onWidthChanged: requestPaint()
         onHeightChanged: requestPaint()
         function rr(c, x, y, w, h, r) {

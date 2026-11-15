@@ -1,7 +1,7 @@
-// Decoración de ventanas de Vitrum. Medidas tomadas de macOS Monterey a 1x (Terminal/Finder):
-// barra de título de 28 px; semáforos de 12 px con borde de 1 px más oscuro, 20 px entre centros,
-// el primero a 14 px del borde izquierdo; esquinas de 10 px; símbolos ×, − y pantalla completa
-// en los tres botones a la vez al pasar el ratón; botones grises en ventanas inactivas.
+// Decoración de ventanas de Vitrum. Medidas de macOS a 1x: semáforos de 12 px con borde de 1 px más oscuro,
+// 20 px entre centros; símbolos ×, − y pantalla completa en los tres botones a la vez al pasar el ratón;
+// botones grises en ventanas inactivas. Como en Tahoe, el primero queda a la misma distancia del borde
+// superior que del izquierdo (20 px, en una barra de título de 40 px) y las esquinas son de 20 px.
 #include <QStringList>
 #include "vitrumdecoration.h"
 
@@ -23,10 +23,10 @@ namespace Vitrum
 {
 namespace
 {
-constexpr qreal TitleBarHeight = 28;
+constexpr qreal TitleBarHeight = 40;    // Tahoe: semáforos a 20 px de arriba (Monterey: 28)
 constexpr qreal ButtonDiameter = 12;
 constexpr qreal ButtonPitch = 20;       // distancia entre centros
-constexpr qreal FirstButtonCenter = 14; // desde el borde izquierdo
+constexpr qreal FirstButtonCenter = 20; // desde el borde izquierdo (igual que el radio de la esquina, como en Tahoe)
 constexpr qreal CornerRadius = 20;    // ventanas de macOS Tahoe, como Ajustes de Vitrum (Sequoia usaba 10)
 constexpr qreal ResizeMargin = 6;       // zona invisible para redimensionar fuera de la ventana
 

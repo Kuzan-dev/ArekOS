@@ -6,6 +6,9 @@ QtObject {
     id: t
 
     property bool dark: false
+    // barras laterales translúcidas (Ajustes → Apariencia → «Permitir que el fondo de pantalla tiña las ventanas»,
+    // la misma opción que la de Dolphin); desactivada, opacas con el tono del Finder de Tahoe
+    property bool translucida: true
     property color accent: "#007AFF"
 
     readonly property string font: "Inter"
@@ -13,7 +16,8 @@ QtObject {
     readonly property int smallSize: 11
 
     readonly property color windowBg: dark ? "#1E1E1E" : "#F6F6F6"
-    readonly property color sidebarBg: dark ? Qt.rgba(0.16, 0.16, 0.17, 0.78) : Qt.rgba(0.90, 0.90, 0.90, 0.80)
+    readonly property color sidebarBg: translucida ? (dark ? Qt.rgba(0.16, 0.16, 0.17, 0.78) : Qt.rgba(0.90, 0.90, 0.90, 0.80))
+                                                   : (dark ? "#1A1C23" : "#ECEDF2")
     readonly property color sidebarEdge: dark ? Qt.rgba(0, 0, 0, 0.45) : Qt.rgba(0, 0, 0, 0.10)
     // filo del panel flotante de la barra lateral (Tahoe)
     readonly property color sidebarRim: dark ? Qt.rgba(1, 1, 1, 0.07) : Qt.rgba(0, 0, 0, 0.07)
@@ -41,6 +45,7 @@ QtObject {
     })
 
     function refresh() {
+        translucida = Number(Sys.readConf("darklyrc", ["Style"], "DolphinSidebarOpacity", "78")) < 100
         // el modo se deduce del color real de las ventanas: KDE no guarda el nombre del esquema
         // cuando coincide con el del tema global, así que no siempre está en kdeglobals
         const bg = Sys.readConf("kdeglobals", ["Colors:Window"], "BackgroundNormal", "").split(",").map(Number)

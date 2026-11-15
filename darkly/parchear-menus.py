@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Parches de Vitrum sobre Darkly (kstyle/): texto desactivado de los menús como en macOS, esquinas de los
 menús como en macOS Tahoe (4 px más redondeadas que el resto de controles, también en el desenfoque y la sombra)
-y botones en píldora como en Tahoe.
+botones en píldora como en Tahoe y, en Dolphin, la barra lateral opaca con el tono de la del Finder.
 
 Darkly pinta las entradas desactivadas con el grupo Disabled del esquema, que KDE calcula difuminando el
 texto hacia el fondo OPACO de la vista (blanco en el modo claro). Con los menús translúcidos (MenuOpacity 55)
@@ -71,6 +71,20 @@ parchear(os.path.join(d, "darklyhelper.cpp"), PILDORA, [(
         topHighlight(painter, frameRect, qRound(radius));
 
     // pressed animation""")])
+
+# Dolphin con la barra lateral opaca (DolphinSidebarOpacity 100, «Permitir que el fondo tiña las ventanas»
+# desactivado): un tono propio para separarla del contenido, como el Finder de Tahoe (#1A1C23 en oscuro, medido
+# en las capturas; un gris azulado equivalente en claro)
+OPACA = "// Vitrum: barra lateral opaca de Dolphin"
+parchear(p, OPACA, [(
+    """        } else {
+            if (_isDolphin && dockWidget->inherits("DolphinDockWidget") && _translucentWidgets.contains(dockWidget->window())) {""",
+    """        } else {
+            // Vitrum: barra lateral opaca de Dolphin, con el tono de la del Finder de Tahoe
+            if (_isDolphin && dockWidget->inherits("DolphinDockWidget") && StyleConfigData::dolphinSidebarOpacity() >= 100) {
+                painter.fillRect(rect, _helper->isDarkTheme(palette) ? QColor(26, 28, 35) : QColor(236, 237, 242));
+            }
+            if (_isDolphin && dockWidget->inherits("DolphinDockWidget") && _translucentWidgets.contains(dockWidget->window())) {""")])
 
 s = open(p).read()
 MARCA = "// Vitrum: texto desactivado"

@@ -38,7 +38,8 @@ kwriteconfig6 --file kwinrc --group org.kde.kdecoration2 --key BorderSizeAuto fa
 # la decoración de ventana sigue siendo Klassy (semáforos)
 D() { kwriteconfig6 --file darklyrc --group Style "$@"; }
 D --key MenuOpacity 55
-D --key DolphinSidebarOpacity 78
+# barra lateral de Dolphin opaca, con el tono de la del Finder (parchear-menus.py); 78 la vuelve translúcida
+D --key DolphinSidebarOpacity 100
 # controles con esquinas de 13 px, más cerca de las cápsulas de macOS Tahoe (los menús llevan 4 más: parchear-menus.py)
 kwriteconfig6 --file darklyrc --group Common --key CornerRadius 13
 # barras de desplazamiento superpuestas que aparecen al desplazarse, como en macOS

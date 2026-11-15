@@ -91,11 +91,14 @@ Window {
     function forward() { if (histIndex < history.length - 1) { histIndex++; go(history[histIndex], false) } }
 
     function updateBlur() {
-        Sys.setBlur(win, sidebar.x, sidebar.y, sidebar.width, sidebar.height, sbRadius)
+        // la barra lateral opaca no necesita desenfoque
+        if (Theme.translucida) Sys.setBlur(win, sidebar.x, sidebar.y, sidebar.width, sidebar.height, sbRadius)
+        else Sys.clearBlur(win)
     }
     onWidthChanged: Qt.callLater(updateBlur)
     onHeightChanged: Qt.callLater(updateBlur)
     onActiveChanged: if (active) Theme.refresh()
+    Connections { target: Theme; function onTranslucidaChanged() { win.updateBlur() } }
     // el modo claro/oscuro puede cambiar con la ventana abierta
     Timer { id: themeWatch; interval: 1500; running: true; repeat: true; onTriggered: Theme.refresh() }
 

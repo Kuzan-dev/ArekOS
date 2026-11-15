@@ -11,7 +11,9 @@ Window {
     color: "transparent"
     flags: Qt.FramelessWindowHint
     title: "vitrum-spotlight#r" + box.radius   // el radio lo usa el desenfoque de Vitrum (esquinas suavizadas)
-    LayerShell.Window.scope: "spotlight"
+    // tipo «mensaje en pantalla» para KWin, como el Centro de Control: con un ámbito que no conoce («spotlight») la
+    // trataba como ventana normal y su efecto Escala animaba la superficie entera
+    LayerShell.Window.scope: "on-screen-display"
     // KWin la abre en la pantalla activa (la del puntero) al mostrarla, como macOS
     LayerShell.Window.wantsToBeOnActiveScreen: true
     LayerShell.Window.layer: LayerShell.Window.LayerOverlay
@@ -25,12 +27,29 @@ Window {
         Theme.refresh()
         query.text = ""
         showFullScreen()
-        Qt.callLater(() => { query.forceActiveFocus(); updateBlur() })
+        aparecer()
+        Qt.callLater(() => query.forceActiveFocus())
     }
-    function close2() { hide(); query.text = "" }
+    function close2() { hide(); query.text = ""; entrada.stop(); aparicion = 1 }
+
+    // Aparición como el Centro de Control: la barra se funde y crece un poco en 0,2 s; arranca con el primer
+    // fotograma ya dibujado y el desenfoque se pone al terminar (puesto antes, KWin lo muestra de golpe)
+    property real aparicion: 1
+    property bool arrancar: false
+    function aparecer() { entrada.stop(); aparicion = 0; arrancar = true; respaldo.restart() }
+    function arrancarEntrada() { if (!arrancar) return; arrancar = false; entrada.restart() }
+    onFrameSwapped: arrancarEntrada()
+    Timer { id: respaldo; interval: 150; onTriggered: sp.arrancarEntrada() }   // por si no llega frameSwapped
+    NumberAnimation {
+        id: entrada
+        target: sp; property: "aparicion"
+        from: 0; to: 1; duration: 200; easing.type: Easing.OutCubic
+        onFinished: sp.updateBlur()
+    }
     function search(text) { if (!visible) open2(); query.text = text }
     function updateBlur() {
         if (!visible) return
+        if (aparicion < 1) { Sys.clearBlur(sp); return }
         Sys.setBlur(sp, box.x, box.y, box.width, box.height, box.radius, Material.contrast, Material.intensity(box.radius), Material.saturation)
     }
     onWidthChanged: Qt.callLater(updateBlur)
@@ -49,6 +68,8 @@ Window {
         x: (parent.width - width) / 2
         y: Math.round(parent.height * 0.20)
         radius: 28
+        opacity: sp.aparicion
+        scale: 0.96 + 0.04 * sp.aparicion
         onXChanged: Qt.callLater(sp.updateBlur)
         onYChanged: Qt.callLater(sp.updateBlur)
         onHeightChanged: Qt.callLater(sp.updateBlur)
@@ -89,7 +110,7 @@ Window {
             for (let i = 0; i < filas.count; i++) { const f = filas.objectAt(i); if (f && out.indexOf(f.cat) < 0) out.push(f.cat) }
             return out
         }
-        readonly property string actual: results.currentItem ? results.currentItem.model.category : ""
+        readonly property string actual: results.currentItem ? (results.currentItem.model.category || "") : ""
         Flickable {
             visible: sp.abierto
             x: 14; y: 57; width: parent.width - 28; height: 44

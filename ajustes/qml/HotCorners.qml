@@ -4,7 +4,8 @@ import QtQuick.Controls as QQC
 
 // Esquinas activas, como en macOS (Escritorio y Dock → Esquinas activas…): una pantalla dibujada con un
 // desplegable en cada esquina. KWin: [ElectricBorders] para las acciones del sistema y las listas BorderActivate
-// de los efectos (vista general = Mission Control; vista de ventanas = todas o las de la app). Índices de
+// de los efectos (vista general = Mission Control; vista de ventanas = todas o las de la app); «Minimizar todo»
+// es el script kwin-scripts/vitrumminimizar (a diferencia de «Escritorio», minimiza de verdad). Índices de
 // esquina de KWin: 1 arriba-dcha, 3 abajo-dcha, 5 abajo-izda, 7 arriba-izda (9 = ninguna).
 QQC.Popup {
     id: hc
@@ -12,8 +13,8 @@ QQC.Popup {
     anchors.centerIn: parent
     modal: true
     padding: 22
-    readonly property var acts: ["None", "Overview", "AllWindows", "AppWindows", "ShowDesktop", "LockScreen"]
-    readonly property var labels: ["—", "Mission Control", "Todas las ventanas", "Ventanas de la app", "Escritorio", "Bloquear pantalla"]
+    readonly property var acts: ["None", "Overview", "AllWindows", "AppWindows", "ShowDesktop", "MinimizeAll", "LockScreen"]
+    readonly property var labels: ["—", "Mission Control", "Todas las ventanas", "Ventanas de la app", "Escritorio", "Minimizar todo", "Bloquear pantalla"]
     property int rev: 0
 
     function lst(group, key) {
@@ -24,8 +25,9 @@ QQC.Popup {
         if (lst("Effect-overview", "BorderActivate").indexOf(i) >= 0) return 1
         if (lst("Effect-windowview", "BorderActivateAll").indexOf(i) >= 0) return 2
         if (lst("Effect-windowview", "BorderActivateClass").indexOf(i) >= 0) return 3
+        if (lst("Script-vitrumminimizar", "Esquinas").indexOf(i) >= 0) return 5
         const a = Sys.readConf("kwinrc", ["ElectricBorders"], key, "None")
-        return a === "ShowDesktop" ? 4 : a === "LockScreen" ? 5 : 0
+        return a === "ShowDesktop" ? 4 : a === "LockScreen" ? 6 : 0
     }
     function setCorner(key, i, act) {
         const put = (group, k, on) => {
@@ -36,6 +38,7 @@ QQC.Popup {
         put("Effect-overview", "BorderActivate", act === "Overview")
         put("Effect-windowview", "BorderActivateAll", act === "AllWindows")
         put("Effect-windowview", "BorderActivateClass", act === "AppWindows")
+        put("Script-vitrumminimizar", "Esquinas", act === "MinimizeAll")
         Sys.writeConf("kwinrc", ["ElectricBorders"], key, act === "ShowDesktop" || act === "LockScreen" ? act : "None")
         Sys.detached("dbus-send", ["--session", "--type=method_call", "--dest=org.kde.KWin", "/KWin", "org.kde.KWin.reconfigure"])
         rev++

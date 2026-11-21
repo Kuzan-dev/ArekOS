@@ -178,12 +178,19 @@ for p_src_dst in "centro-control:org.vitrum.centrocontrol" \
                  "calendario:org.vitrum.calendario" \
                  "menu-apple:org.vitrum.menuapple" \
                  "spotlight:org.vitrum.spotlight" \
-                 "nombre-app:org.vitrum.nombreapp"; do
+                 "nombre-app:org.vitrum.nombreapp" \
+                 "monitor:org.vitrum.monitor"; do
     src="${p_src_dst%%:*}"
     dst="${p_src_dst##*:}"
     rm -rf "$HOME/.local/share/plasma/plasmoids/$dst"
     cp -r "$REPO_DIR/$src" "$HOME/.local/share/plasma/plasmoids/$dst"
 done
+
+# Script de KWin «Minimizar todo» para las esquinas activas (las esquinas se eligen en Ajustes)
+mkdir -p "$HOME/.local/share/kwin/scripts"
+rm -rf "$HOME/.local/share/kwin/scripts/vitrumminimizar"
+cp -r "$REPO_DIR/kwin-scripts/vitrumminimizar" "$HOME/.local/share/kwin/scripts/"
+kwriteconfig6 --file kwinrc --group Plugins --key vitrumminimizarEnabled true
 
 cp "$REPO_DIR/iconos/"*.svg "$HOME/.local/share/icons/hicolor/scalable/apps/"
 # iconos de apps que WhiteSur no trae (Disney+, HBO Max, Haruna, Glassy Music…) con su forma y su sombra;

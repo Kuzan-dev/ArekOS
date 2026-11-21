@@ -1,0 +1,13 @@
+{
+    "KPlugin": {
+        "Id": "vitrumminimizar",
+        "Name": "Vitrum: minimizar todo",
+        "Description": "Esquina activa que minimiza todas las ventanas (y las restaura al volver)",
+        "Authors": [{ "Name": "Vitrum" }],
+        "License": "GPL",
+        "Version": "1.0",
+        "EnabledByDefault": false
+    },
+    "X-Plasma-API": "javascript",
+    "KPackageStructure": "KWin/Script"
+}

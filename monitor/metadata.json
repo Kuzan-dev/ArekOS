@@ -1,0 +1,14 @@
+{
+    "KPlugin": {
+        "Id": "org.vitrum.monitor",
+        "Name": "Monitor del sistema",
+        "Description": "Uso y temperatura de la CPU y la GPU y uso de la memoria, como un widget de macOS Tahoe",
+        "Icon": "utilities-system-monitor",
+        "Authors": [{ "Name": "Vitrum" }],
+        "License": "GPL-3.0",
+        "Version": "1.0",
+        "FormFactors": ["desktop"]
+    },
+    "KPackageStructure": "Plasma/Applet",
+    "X-Plasma-API-Minimum-Version": "6.0"
+}
